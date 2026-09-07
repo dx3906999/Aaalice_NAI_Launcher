@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../core/utils/localization_extension.dart';
 import '../../../../../data/models/vibe/vibe_library_category.dart';
 import '../../../../../data/models/vibe/vibe_library_entry.dart';
 import '../../../../widgets/common/library_classification_drag.dart';
+import '../../../../providers/vibe_library_provider.dart';
 import '../../../../widgets/common/context_menu_anchor.dart';
 import '../../../../widgets/gallery/gallery_album_tree_view.dart';
 import '../../../../widgets/gallery/gallery_sidebar.dart';
@@ -13,7 +16,7 @@ import 'vibe_category_item.dart';
 ///
 /// Vibes use lightweight logical categories rather than a filesystem tree, so
 /// the sidebar intentionally exposes only All, Favorites and user categories.
-class VibeCategoryTreeView extends StatelessWidget {
+class VibeCategoryTreeView extends ConsumerWidget {
   const VibeCategoryTreeView({
     super.key,
     required this.categories,
@@ -40,11 +43,15 @@ class VibeCategoryTreeView extends StatelessWidget {
   final void Function(String id, String newName)? onCategoryRename;
   final ValueChanged<String>? onCategoryDelete;
   final VoidCallback? onCreateCategory;
-  final void Function(VibeLibraryEntry entry, String? categoryId)? onEntryDrop;
-  final ValueChanged<VibeLibraryEntry>? onFavoriteDrop;
+  final FutureOr<void> Function(VibeLibraryEntry entry, String? categoryId)?
+  onEntryDrop;
+  final FutureOr<void> Function(VibeLibraryEntry)? onFavoriteDrop;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final owner = ref.watch(vibeLibraryNotifierProvider.notifier);
+    Future<VibeLibraryEntry?> resolve(String id) async =>
+        (await owner.resolveEntriesByIds([id])).singleOrNull;
     final sortedCategories = [...categories]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return GestureDetector(
@@ -57,8 +64,10 @@ class VibeCategoryTreeView extends StatelessWidget {
         children: [
           if (includeAll)
             LibraryClassificationDropTarget<VibeLibraryEntry>(
+              kind: AgentChatResourceKind.vibeLibraryEntry,
+              resolve: resolve,
               enabled: onEntryDrop != null,
-              canAccept: (entry) => entry.categoryId != null,
+              needsChange: (entry) => entry.categoryId != null,
               onAccept: (entry) => onEntryDrop?.call(entry, null),
               child: GalleryAllImagesItem(
                 key: const ValueKey('vibe-library-all'),
@@ -71,8 +80,10 @@ class VibeCategoryTreeView extends StatelessWidget {
               ),
             ),
           LibraryClassificationDropTarget<VibeLibraryEntry>(
+            kind: AgentChatResourceKind.vibeLibraryEntry,
+            resolve: resolve,
             enabled: onFavoriteDrop != null,
-            canAccept: (entry) => !entry.isFavorite,
+            needsChange: (entry) => !entry.isFavorite,
             onAccept: (entry) => onFavoriteDrop?.call(entry),
             child: GallerySidebarFavoritesItem(
               key: const ValueKey('vibe-library-favorites'),
@@ -84,8 +95,10 @@ class VibeCategoryTreeView extends StatelessWidget {
           ),
           for (final category in sortedCategories)
             LibraryClassificationDropTarget<VibeLibraryEntry>(
+              kind: AgentChatResourceKind.vibeLibraryEntry,
+              resolve: resolve,
               enabled: onEntryDrop != null,
-              canAccept: (entry) => entry.categoryId != category.id,
+              needsChange: (entry) => entry.categoryId != category.id,
               onAccept: (entry) => onEntryDrop?.call(entry, category.id),
               child: VibeCategoryItem(
                 key: ValueKey('vibe-library-category-${category.id}'),

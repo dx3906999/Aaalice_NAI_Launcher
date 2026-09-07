@@ -257,7 +257,7 @@ Border _activeBorder(WidgetTester tester) {
     ),
   );
   return containers
-      .map((container) => container.decoration)
+      .map((container) => container.foregroundDecoration)
       .whereType<BoxDecoration>()
       .map((decoration) => decoration.border)
       .whereType<Border>()

@@ -1,3 +1,4 @@
+import 'image_card_frame.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,9 +11,9 @@ import 'animated_favorite_button.dart';
 import 'card_action_buttons.dart';
 import 'decoded_memory_image.dart';
 import 'image_card_actions.dart';
+import 'image_card_action_dispatch.dart';
 import 'image_card_controller.dart';
 import 'image_card_effects.dart';
-import 'image_card_hover_motion.dart';
 import 'image_card_models.dart';
 import 'image_card_stream_preview.dart';
 
@@ -81,180 +82,161 @@ class ImageCardSurface extends StatelessWidget {
         onSecondaryTapUp: capabilities.enableContextMenu
             ? (details) => unawaited(onShowContextMenu(details.globalPosition))
             : null,
-        child: ImageCardHoverMotion(
+        child: ImageCardFrame(
           hovered: controller.isHovering,
-          enabled: capabilities.enableHoverScale,
-          child: AnimatedContainer(
-            duration: reducedMotion || !capabilities.hoverEffectsEnabled
-                ? Duration.zero
-                : motion.fastDuration,
-            curve: motion.standardCurve,
-            decoration: BoxDecoration(
-              color: ImageViewportSurface.background,
-              borderRadius: BorderRadius.circular(12),
-              border: data.isSelected
-                  ? Border.all(color: theme.colorScheme.primary, width: 2)
-                  : data.isPreviewActive
-                  ? Border.all(color: theme.colorScheme.tertiary, width: 2)
-                  : null,
-              boxShadow: [
-                BoxShadow(
-                  color: data.isSelected
-                      ? theme.colorScheme.primary.withValues(alpha: 0.16)
-                      : Colors.black.withValues(
-                          alpha: controller.isHovering ? 0.16 : 0.08,
-                        ),
-                  blurRadius: controller.isHovering ? 14 : 6,
-                  offset: Offset(0, controller.isHovering ? 6 : 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (data.imageContent != null && data.underlay != null)
-                    data.underlay!,
-                  RepaintBoundary(
-                    child: data.imageContent ?? _completedImage(theme),
-                  ),
-                  _DragPreparationOverlay(data: data, controller: controller),
-                  if (controller.isHovering && capabilities.enableGlossEffect)
-                    Positioned.fill(
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: 1),
-                        duration: reducedMotion
-                            ? Duration.zero
-                            : motion.fastDuration,
-                        curve: motion.standardCurve,
-                        builder: (context, glowIntensity, _) => AnimatedBuilder(
-                          animation: controller.glossAnimation,
-                          builder: (context, _) => ImageCardEffects(
-                            glowColor: theme.colorScheme.primary,
-                            glowIntensity: glowIntensity,
-                            glossProgress: controller.glossAnimation.value,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (controller.isHovering || data.isSelected)
-                    IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.center,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.4),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (data.statusBadgeLabel != null)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: _StatusBadge(data: data),
-                    ),
-                  if (capabilities.enableSelection &&
-                      data.statusBadgeLabel == null &&
-                      (controller.isHovering || data.isSelected))
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: _SelectionCheckbox(
-                        selected: data.isSelected,
-                        onChanged: capabilities.onSelectionChanged,
-                      ),
-                    ),
-                  if (capabilities.onFavoriteToggle != null)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: CardFavoriteButton(
-                        isFavorite: data.isFavorite,
-                        onToggle: capabilities.onFavoriteToggle,
-                        size: 17,
-                        borderRadius: 999,
-                      ),
-                    ),
-                  if (controller.isHovering && hoverActions.isNotEmpty)
-                    Positioned(
-                      bottom: 12,
-                      left: 0,
-                      right: 0,
-                      child: ImageCardHoverActionBar(actions: hoverActions),
-                    ),
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Offstage(
-                      key: const ValueKey(
-                        'selectable-image-index-badge-offstage',
-                      ),
-                      offstage: !showIndexBadge,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          data.index == null ? '' : '${data.index! + 1}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (data.isSelected)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.15,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (context.interactionPolicy.usesTouchActionMenu &&
-                      (!controller.isHovering ||
-                          context.interactionPolicy.prefersTouchPresentation) &&
-                      capabilities.enableContextMenu &&
-                      actions.isNotEmpty)
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: IconButton(
-                        onPressed: () =>
-                            unawaited(onShowContextMenu(Offset.zero)),
-                        tooltip: context.l10n.common_moreActions,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 48,
-                          height: 48,
-                        ),
-                        style: ImageOverlayControlStyle.iconButton(
-                          context,
-                          extent: 48,
-                        ),
-                        icon: const Icon(Icons.more_horiz_rounded),
-                      ),
-                    ),
-                ],
+          selected: data.isSelected,
+          previewActive: data.isPreviewActive,
+          restingShadow: true,
+          hoverScaleEnabled: capabilities.enableHoverScale,
+          animate: capabilities.hoverEffectsEnabled,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (data.imageContent != null && data.underlay != null)
+                data.underlay!,
+              RepaintBoundary(
+                child: data.imageContent ?? _completedImage(theme),
               ),
-            ),
+              _DragPreparationOverlay(data: data, controller: controller),
+              if (controller.isHovering && capabilities.enableGlossEffect)
+                Positioned.fill(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: reducedMotion
+                        ? Duration.zero
+                        : motion.fastDuration,
+                    curve: motion.standardCurve,
+                    builder: (context, glowIntensity, _) => AnimatedBuilder(
+                      animation: controller.glossAnimation,
+                      builder: (context, _) => ImageCardEffects(
+                        glowColor: theme.colorScheme.primary,
+                        glowIntensity: glowIntensity,
+                        glossProgress: controller.glossAnimation.value,
+                      ),
+                    ),
+                  ),
+                ),
+              if (controller.isHovering || data.isSelected)
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.center,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.4),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (data.statusBadgeLabel != null)
+                Positioned(top: 8, left: 8, child: _StatusBadge(data: data)),
+              if (capabilities.enableSelection &&
+                  data.statusBadgeLabel == null &&
+                  (capabilities.selectionMode ||
+                      (capabilities.showSelectionOnHover &&
+                          controller.isHovering) ||
+                      data.isSelected))
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: _SelectionCheckbox(
+                    selected: data.isSelected,
+                    onChanged: capabilities.onSelectionChanged,
+                  ),
+                ),
+              if (capabilities.onFavoriteToggle != null &&
+                  !capabilities.selectionMode)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: CardFavoriteButton(
+                    isFavorite: data.isFavorite,
+                    onToggle: () => unawaited(
+                      dispatchImageCardAction(
+                        context,
+                        actions.firstWhere(
+                          (a) => a.id == ImageCardActionId.favorite,
+                        ),
+                      ),
+                    ),
+                    size: 17,
+                    borderRadius: 999,
+                  ),
+                ),
+              if (controller.isHovering &&
+                  hoverActions.isNotEmpty &&
+                  !capabilities.selectionMode)
+                Positioned(
+                  bottom: 12,
+                  left: 0,
+                  right: 0,
+                  child: ImageCardHoverActionBar(actions: hoverActions),
+                ),
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: Offstage(
+                  key: const ValueKey('selectable-image-index-badge-offstage'),
+                  offstage: !showIndexBadge,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      data.index == null ? '' : '${data.index! + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (data.isSelected)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.15,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              if (context.interactionPolicy.usesTouchActionMenu &&
+                  (!controller.isHovering ||
+                      context.interactionPolicy.prefersTouchPresentation) &&
+                  capabilities.enableContextMenu &&
+                  actions.isNotEmpty)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: IconButton(
+                    onPressed: () => unawaited(onShowContextMenu(Offset.zero)),
+                    tooltip: context.l10n.common_moreActions,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 48,
+                      height: 48,
+                    ),
+                    style: ImageOverlayControlStyle.iconButton(
+                      context,
+                      extent: 48,
+                    ),
+                    icon: const Icon(Icons.more_horiz_rounded),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -312,80 +294,32 @@ class ImageCardSurface extends StatelessWidget {
 
 class ImageCardHoverActionBar extends StatelessWidget {
   const ImageCardHoverActionBar({super.key, required this.actions});
-
   final List<ImageCardAction> actions;
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        key: const ValueKey('image-card-hover-action-bar-surface'),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: ImageOverlayControlStyle.toolbarSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: ImageOverlayControlStyle.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          alignment: WrapAlignment.center,
-          children: [
-            for (final action in actions) _HoverAction(action: action),
-          ],
-        ),
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      key: const ValueKey('image-card-hover-action-bar-surface'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: ImageOverlayControlStyle.toolbarSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ImageOverlayControlStyle.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _HoverAction extends StatelessWidget {
-  const _HoverAction({required this.action});
-  final ImageCardAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final action = this.action;
-    final interaction = context.interactionPolicy;
-    return IconButton(
-      tooltip: action.label,
-      onPressed: action.invoke,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size.square(40)),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        ),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          final emphasized = interaction.isControlHighlighted(states);
-          if (action.isPrimary) {
-            return colors.primary.withValues(alpha: emphasized ? 1 : 0.9);
-          }
-          return emphasized
-              ? ImageOverlayControlStyle.foreground.withValues(alpha: 0.16)
-              : Colors.transparent;
-        }),
-        foregroundColor: WidgetStatePropertyAll(
-          action.isPrimary
-              ? colors.onPrimary
-              : ImageOverlayControlStyle.foreground,
-        ),
+      child: CardActionButtons(
+        buttons: actions,
+        visible: true,
+        pointerExtent: 40,
       ),
-      icon: Icon(action.icon, size: 20),
-    );
-  }
+    ),
+  );
 }
 
 class _DragPreparationOverlay extends StatelessWidget {

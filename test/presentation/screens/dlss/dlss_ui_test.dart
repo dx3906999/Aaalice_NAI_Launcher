@@ -428,7 +428,8 @@ void main() {
             expect(
               find.ancestor(of: group, matching: find.byType(SettingsCard)),
               key == 'dlss-preset-group' ? findsNothing : findsOneWidget,
-              reason: 'preset and parameter subsections share one complete surface',
+              reason:
+                  'preset and parameter subsections share one complete surface',
             );
             if (key != 'dlss-preset-group') {
               expect(
@@ -761,15 +762,16 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('dlss-settings-entry')), findsNothing);
         final context = tester.element(find.byType(GenerationSettingsSection));
-        final menu = LocalImageContextMenu.buildSendEntries(
+        final menu = LocalImageContextMenu.buildSendActions(
           context,
+          onAction: (_) async {},
           isKritaConnected: false,
         );
-        final values = menu
-            .whereType<PopupMenuItem<LocalImageContextAction>>()
-            .map((item) => item.value);
+        final values = menu.map((item) => item.id);
         expect(
-          values.contains(LocalImageContextAction.dlssEnhance),
+          values.contains(
+            LocalImageContextMenu.idFor(LocalImageContextAction.dlssEnhance),
+          ),
           platform == TargetPlatform.windows,
         );
         await tester.pumpWidget(

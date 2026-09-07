@@ -1,4 +1,25 @@
 {
+  "cardAction_singleScope": "僅此項",
+  "cardDrag_preparingCount": "正在準備 {count} 項拖出資源…",
+  "@cardDrag_preparingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cardDrop_unsupported": "此位置不支援這組資源或數量，請使用對應的資源匯入入口。",
+  "cardAction_batchFailed": "{total} 項中有 {failed} 項失敗",
+  "@cardAction_batchFailed": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "generation_enhancementFailed": "增強失敗，已保留原圖",
   "generation_enhancementRetryHint": "可在影像操作選單中選擇 DLSS NR，僅重試增強。",
 

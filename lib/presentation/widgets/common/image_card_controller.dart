@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/utils/image_share_sanitizer.dart';
 import '../../../core/utils/keyboard_modifier_utils.dart';
@@ -209,8 +210,10 @@ class ImageCardController extends ChangeNotifier {
 
   void handleLegacyTap() {
     final bypass =
+        _capabilities.selectionMode ||
         _capabilities.allowRepeatedModifierTaps &&
-        isPrimarySelectionModifierPressed();
+            (isPrimarySelectionModifierPressed() ||
+                HardwareKeyboard.instance.isShiftPressed);
     if (_isTapping && !bypass) return;
     if (!bypass) _isTapping = true;
     (_capabilities.onTap ?? _capabilities.onFullscreen)?.call();
@@ -223,7 +226,9 @@ class ImageCardController extends ChangeNotifier {
   }
 
   void handleLinkedTapUp(TapUpDetails details) {
-    if (isPrimarySelectionModifierPressed()) {
+    if (_capabilities.selectionMode ||
+        isPrimarySelectionModifierPressed() ||
+        HardwareKeyboard.instance.isShiftPressed) {
       clearPendingDoubleTap();
       _capabilities.onTap?.call();
       return;

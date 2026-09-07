@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nai_launcher/l10n/app_localizations.dart';
 import 'package:nai_launcher/core/platform/platform_capabilities.dart';
 import 'package:nai_launcher/presentation/adaptive/interaction_policy.dart';
 import 'package:nai_launcher/presentation/widgets/common/card_action_buttons.dart';
@@ -16,6 +17,8 @@ void main() {
       var selected = -1;
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Align(
             alignment: Alignment.topLeft,
             child: SizedBox(
@@ -28,10 +31,11 @@ void main() {
                 availableSize: const Size(96, 100),
                 buttons: [
                   for (var i = 0; i < 7; i++)
-                    CardActionButtonConfig(
+                    ImageCardAction(
+                      id: ImageCardActionId.values[i],
                       icon: Icons.download,
-                      tooltip: 'action $i',
-                      onPressed: () => selected = i,
+                      label: 'action $i',
+                      invoke: () => selected = i,
                     ),
                 ],
               ),
@@ -70,16 +74,19 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: StatefulBuilder(
           builder: (context, setState) {
             setHostState = setState;
             return CardActionButtons(
               visible: visible,
               buttons: [
-                CardActionButtonConfig(
+                ImageCardAction(
+                  id: ImageCardActionId.values[1],
                   icon: Icons.download,
-                  tooltip: 'download',
-                  onPressed: () {},
+                  label: 'download',
+                  invoke: () {},
                 ),
               ],
             );
@@ -109,6 +116,8 @@ void main() {
     late StateSetter updateHost;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: StatefulBuilder(
           builder: (context, setState) {
             updateHost = setState;
@@ -117,15 +126,17 @@ void main() {
               child: CardActionButtons(
                 visible: visible,
                 buttons: [
-                  CardActionButtonConfig(
+                  ImageCardAction(
+                    id: ImageCardActionId.values[2],
                     icon: Icons.download,
-                    tooltip: 'download',
-                    onPressed: () {},
+                    label: 'download',
+                    invoke: () {},
                   ),
-                  CardActionButtonConfig(
+                  ImageCardAction(
+                    id: ImageCardActionId.values[3],
                     icon: Icons.more_horiz,
-                    tooltip: 'more',
-                    onPressed: () {},
+                    label: 'more',
+                    invoke: () {},
                   ),
                 ],
               ),
@@ -154,6 +165,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: InteractionPolicyScope(
           initialPolicy: const InteractionPolicy(
             modality: InteractionModality.pointer,
@@ -164,10 +177,11 @@ void main() {
             child: CardActionButtons(
               visible: true,
               buttons: [
-                CardActionButtonConfig(
+                ImageCardAction(
+                  id: ImageCardActionId.values[4],
                   icon: Icons.download,
-                  tooltip: 'download',
-                  onPressed: () => pressed++,
+                  label: 'download',
+                  invoke: () => pressed++,
                 ),
               ],
             ),
@@ -191,6 +205,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: InteractionPolicyScope(
           initialPolicy: const InteractionPolicy(
             modality: InteractionModality.pointer,
@@ -201,10 +217,11 @@ void main() {
             child: CardActionButtons(
               visible: true,
               buttons: [
-                CardActionButtonConfig(
+                ImageCardAction(
+                  id: ImageCardActionId.values[5],
                   icon: Icons.download,
-                  tooltip: 'download',
-                  onPressed: () {},
+                  label: 'download',
+                  invoke: () {},
                 ),
               ],
             ),
@@ -224,6 +241,8 @@ void main() {
     var pressed = 0;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: InteractionPolicyScope(
           initialPolicy: const InteractionPolicy(
             modality: InteractionModality.keyboard,
@@ -234,10 +253,11 @@ void main() {
             child: CardActionButtons(
               visible: false,
               buttons: [
-                CardActionButtonConfig(
+                ImageCardAction(
+                  id: ImageCardActionId.values[6],
                   icon: Icons.download,
-                  tooltip: 'download',
-                  onPressed: () => pressed++,
+                  label: 'download',
+                  invoke: () => pressed++,
                 ),
               ],
             ),
@@ -263,15 +283,18 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Center(
           child: CardActionButtons(
             visible: true,
             buttons: [
-              CardActionButtonConfig(
+              ImageCardAction(
+                id: ImageCardActionId.values[7],
                 icon: Icons.download,
-                tooltip: 'download',
+                label: 'download',
                 isLoading: true,
-                onPressed: () => pressed++,
+                invoke: () => pressed++,
               ),
             ],
           ),
@@ -280,7 +303,7 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.bySemanticsLabel('download, Loading…'), findsOneWidget);
+    expect(find.bySemanticsLabel('download, Loading...'), findsOneWidget);
     expect(tester.getSize(find.byType(IconButton)), const Size.square(32));
     await tester.tap(find.byType(IconButton));
     expect(pressed, 0);
@@ -293,6 +316,8 @@ void main() {
     var pressed = 0;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Align(
           alignment: Alignment.topLeft,
           child: SizedBox(
@@ -303,10 +328,11 @@ void main() {
               direction: Axis.vertical,
               buttons: [
                 for (var index = 0; index < 5; index++)
-                  CardActionButtonConfig(
+                  ImageCardAction(
+                    id: ImageCardActionId.values[8],
                     icon: index == 4 ? Icons.send : Icons.circle_outlined,
-                    tooltip: 'action $index',
-                    onPressed: index == 4 ? () => pressed++ : () {},
+                    label: 'action $index',
+                    invoke: index == 4 ? () => pressed++ : () {},
                   ),
               ],
             ),
@@ -326,6 +352,8 @@ void main() {
     const cardSize = Size(200, 100);
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Align(
           alignment: Alignment.topLeft,
           child: SizedBox.fromSize(
@@ -335,11 +363,12 @@ void main() {
               visible: true,
               buttons: [
                 for (var index = 0; index < 6; index++)
-                  CardActionButtonConfig(
+                  ImageCardAction(
                     key: ValueKey('landscape-action-$index'),
+                    id: ImageCardActionId.values[index],
                     icon: Icons.circle_outlined,
-                    tooltip: 'action $index',
-                    onPressed: () {},
+                    label: 'action $index',
+                    invoke: () {},
                   ),
               ],
             ),
@@ -368,6 +397,8 @@ void main() {
   testWidgets('seven pointer actions use two balanced columns', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Align(
           alignment: Alignment.topLeft,
           child: CardActionButtons(
@@ -375,11 +406,12 @@ void main() {
             direction: Axis.vertical,
             buttons: [
               for (var index = 0; index < 7; index++)
-                CardActionButtonConfig(
+                ImageCardAction(
                   key: ValueKey('bounded-action-$index'),
+                  id: ImageCardActionId.values[index],
                   icon: Icons.circle_outlined,
-                  tooltip: 'action $index',
-                  onPressed: () {},
+                  label: 'action $index',
+                  invoke: () {},
                 ),
             ],
           ),
@@ -404,6 +436,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Center(
           child: StatefulBuilder(
             builder: (context, setState) {
@@ -411,10 +445,11 @@ void main() {
               return CardActionButtons(
                 visible: visible,
                 buttons: [
-                  CardActionButtonConfig(
+                  ImageCardAction(
+                    id: ImageCardActionId.values[9],
                     icon: Icons.download,
-                    tooltip: 'download',
-                    onPressed: () {},
+                    label: 'download',
+                    invoke: () {},
                   ),
                 ],
               );
@@ -443,15 +478,18 @@ void main() {
     for (final brightness in Brightness.values) {
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: ThemeData(brightness: brightness),
           home: Center(
             child: CardActionButtons(
               visible: true,
               buttons: [
-                CardActionButtonConfig(
+                ImageCardAction(
+                  id: ImageCardActionId.values[10],
                   icon: Icons.download,
-                  tooltip: 'download',
-                  onPressed: () {},
+                  label: 'download',
+                  invoke: () {},
                 ),
               ],
             ),
@@ -483,6 +521,8 @@ void main() {
   testWidgets('工作台图像卡片底栏复用半透明图像覆盖层', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Center(
           child: ImageCardHoverActionBar(
             actions: [
@@ -492,7 +532,7 @@ void main() {
                 label: 'copy',
                 menuLabel: 'copy',
                 invoke: () {},
-                group: 0,
+                group: ImageCardActionGroup.view,
                 showOnHover: true,
               ),
             ],

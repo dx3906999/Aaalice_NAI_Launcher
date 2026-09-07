@@ -8,6 +8,15 @@ enum ImageHoverPreviewVerticalAlignment { center, targetTop }
 /// Coordinates delayed image previews in the root overlay and keeps them
 /// inside the current safe viewport.
 class ImageHoverPreviewController with WidgetsBindingObserver {
+  static final Set<ImageHoverPreviewController> _active = {};
+
+  /// Menus, selection and drags take over pointer interaction from previews.
+  static void dismissAll() {
+    for (final controller in _active.toList()) {
+      controller.dismiss();
+    }
+  }
+
   OverlayEntry? _entry;
   Timer? _showTimer;
   int _revision = 0;
@@ -16,6 +25,7 @@ class ImageHoverPreviewController with WidgetsBindingObserver {
   bool _metricsRebuildScheduled = false;
   VoidCallback? _onDismissIntent;
   bool _intentStarted = false;
+  ScrollPosition? _scrollPosition;
 
   String? get activeStableKey => _stableKey;
   bool get isShowing => _entry != null;
@@ -35,14 +45,18 @@ class ImageHoverPreviewController with WidgetsBindingObserver {
     Duration delay = const Duration(milliseconds: 280),
   }) {
     dismiss();
+    _active.add(this);
     final revision = ++_revision;
     _stableKey = stableKey;
     _onDismissIntent = onDismissIntent;
     _startObservingMetrics();
+    _scrollPosition = Scrollable.maybeOf(context)?.position;
+    _scrollPosition?.addListener(dismiss);
     _showTimer = Timer(delay, () {
       if (_revision != revision ||
           _stableKey != stableKey ||
           !context.mounted) {
+        if (_revision == revision) dismiss();
         return;
       }
       _intentStarted = true;
@@ -119,6 +133,9 @@ class ImageHoverPreviewController with WidgetsBindingObserver {
   }
 
   void dismiss() {
+    _scrollPosition?.removeListener(dismiss);
+    _scrollPosition = null;
+    _active.remove(this);
     if (_intentStarted) _onDismissIntent?.call();
     _intentStarted = false;
     _onDismissIntent = null;

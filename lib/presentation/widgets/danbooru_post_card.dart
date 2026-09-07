@@ -1,9 +1,10 @@
+import '../selection/card_selection_scope.dart';
+import 'common/image_card_frame.dart';
 import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import 'common/image_viewport_surface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,9 +25,9 @@ import '../providers/character_prompt_provider.dart';
 import '../providers/replication_queue_provider.dart';
 import '../providers/reverse_prompt_provider.dart';
 import '../services/generation_prompt_transfer_service.dart';
-import '../themes/theme_extension.dart';
 import 'common/card_action_buttons.dart';
 import 'common/image_card_actions.dart';
+import 'common/image_card_action_region.dart';
 import 'common/image_card_hover_motion.dart';
 import 'common/image_hover_preview.dart';
 import 'common/image_hover_preview_controller.dart';
@@ -44,7 +45,7 @@ import 'common/app_toast.dart';
 /// - 使用 RepaintBoundary 减少不必要的重绘
 /// - memCacheWidth 限制内存占用
 /// - 使用统一缓存管理器与按显示尺寸解码
-class DanbooruPostCard extends StatefulWidget {
+class DanbooruPostCard extends ConsumerStatefulWidget {
   final DanbooruPost post;
   final double itemWidth;
 
@@ -122,10 +123,10 @@ class DanbooruPostCard extends StatefulWidget {
   });
 
   @override
-  State<DanbooruPostCard> createState() => _DanbooruPostCardState();
+  ConsumerState<DanbooruPostCard> createState() => _DanbooruPostCardState();
 }
 
-class _DanbooruPostCardState extends State<DanbooruPostCard> {
+class _DanbooruPostCardState extends ConsumerState<DanbooruPostCard> {
   bool _isHovering = false;
   bool _isFocused = false;
   late final ImageHoverPreviewController _ownedHoverController;
@@ -143,6 +144,7 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
   @override
   void didUpdateWidget(covariant DanbooruPostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.selectionMode) _hoverController.dismiss();
     if (oldWidget.post.stableKey != widget.post.stableKey) {
       (oldWidget.hoverController ?? _ownedHoverController).dismissFor(
         oldWidget.post.stableKey,
@@ -372,10 +374,192 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ImageCardActionRegion(
+    resourceId: widget.post.stableKey,
+    actions: _buildActions(),
+    onMenuOpened: _removeOverlay,
+    builder: _buildCard,
+  );
+
+  List<ImageCardAction> _buildActions() {
+    final onAddToAgent = ImageCardActionScope.maybeOf(context)?.onAddToAgent;
+    return [
+      ImageCardAction(
+        id: ImageCardActionId.viewDetail,
+        icon: Icons.open_in_full,
+        label: context.l10n.image_viewDetail,
+        invoke: widget.onTap,
+        showOnHover: false,
+      ),
+      if (widget.canSelect && widget.onLongPress != null)
+        ImageCardAction(
+          id: ImageCardActionId.select,
+          icon: Icons.check_circle_outline,
+          label: context.l10n.common_multiSelect,
+          invoke: widget.onLongPress!,
+          showOnHover: false,
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.sendToGeneration,
+        icon: Icons.send,
+        label: context.l10n.onlineGallery_sendToTextToImage,
+        invoke: () => _handleSendToGeneration(ref),
+      ),
+      if (widget.showFavoriteAction &&
+          !widget.favoriteReadOnly &&
+          widget.onFavoriteToggle != null)
+        ImageCardAction(
+          id: ImageCardActionId.favorite,
+          icon: widget.isFavorited ? Icons.favorite : Icons.favorite_border,
+          label: [
+            widget.isFavorited
+                ? context.l10n.common_unfavorite
+                : context.l10n.common_favorite,
+            if (widget.secondaryFavoriteTooltip != null)
+              widget.secondaryFavoriteTooltip!,
+          ].join(' · '),
+          iconColor: widget.isFavorited ? Colors.red : Colors.white,
+          isLoading: widget.isFavoriteLoading,
+          invoke: widget.onFavoriteToggle!,
+        ),
+      if (onAddToAgent != null)
+        ImageCardAction(
+          id: ImageCardActionId.addToAgent,
+          icon: Icons.auto_awesome_outlined,
+          label: context.l10n.agentChat_addResource,
+          invoke: onAddToAgent,
+        ),
+      if (widget.post.bestQualityUrl.isNotEmpty)
+        ImageCardAction(
+          id: ImageCardActionId.export,
+          icon: Icons.download,
+          label: context.l10n.onlineGallery_downloadOriginal,
+          invoke: _handleDownload,
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.addToQueue,
+        icon: Icons.playlist_add,
+        label: context.l10n.onlineGallery_addToQueue,
+        invoke: () async {
+          final prompt = _promptForGenerationAction();
+          if (prompt == null) return;
+          final negativePrompt = widget.negativePromptOverride ?? '';
+          final task = ReplicationTask.create(
+            prompt: prompt,
+            negativePrompt: negativePrompt,
+            applyNegativePrompt: negativePrompt.trim().isNotEmpty,
+            thumbnailUrl: widget.post.previewUrl,
+            source: ReplicationTaskSource.online,
+            characterPrompts:
+                widget.post.sourceId == GallerySourceId.quickTagCloud ||
+                    widget.characterPrompts.isNotEmpty
+                ? [
+                    for (final character in widget.characterPrompts)
+                      ReplicationCharacterPromptSnapshot(
+                        prompt: character.prompt,
+                        negativePrompt: character.negativePrompt,
+                      ),
+                  ]
+                : null,
+          );
+          final success = await ref
+              .read(replicationQueueNotifierProvider.notifier)
+              .add(task);
+          if (mounted) {
+            if (success) {
+              final count = ref.read(
+                replicationQueueNotifierProvider.select((state) => state.count),
+              );
+              AppToast.success(
+                context,
+                context.l10n.onlineGallery_addedToQueueWithCount(count),
+              );
+            } else {
+              AppToast.warning(
+                context,
+                context.l10n.onlineGallery_queueFullMax,
+              );
+            }
+          }
+        },
+      ),
+      if (widget.post.mediaCapability.isFlutterImage &&
+          widget.post.mediaCapability.imageDisplayUrl.isNotEmpty)
+        ImageCardAction(
+          id: ImageCardActionId.reversePrompt,
+          icon: Icons.manage_search_rounded,
+          label: context.l10n.onlineGallery_sendToReversePrompt,
+          invoke: () async {
+            final imageUrl = widget.post.mediaCapability.imageDisplayUrl;
+            if (imageUrl.isEmpty) {
+              AppToast.warning(context, context.l10n.onlineGallery_noImageUrl);
+              return;
+            }
+            try {
+              final file = await OnlineGalleryImageCacheManager.instance
+                  .getSingleFile(
+                    imageUrl,
+                    key: onlineGalleryImageCacheKeyForUrl(imageUrl),
+                    headers: onlineGalleryImageHeadersForUrl(imageUrl),
+                  );
+              final bytes = await file.readAsBytes();
+              await ref
+                  .read(reversePromptProvider.notifier)
+                  .addImage(
+                    bytes,
+                    name:
+                        '${widget.post.sourceId.key}_${widget.post.sourceWorkId}'
+                            .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_'),
+                  );
+              if (mounted) {
+                context.go('/');
+                AppToast.info(
+                  context,
+                  context.l10n.onlineGallery_sentToReversePrompt,
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                AppToast.error(
+                  context,
+                  context.l10n.onlineGallery_reversePromptSendFailed('$e'),
+                );
+              }
+            }
+          },
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.copyPrompt,
+        icon: Icons.copy,
+        label:
+            widget.copyTooltip ??
+            (widget.promptOverride != null
+                ? context.l10n.localGallery_copyPrompt
+                : context.l10n.onlineGallery_copyTags),
+        invoke: () async {
+          final prompt = widget.copyTextOverride == null
+              ? _promptForAction()
+              : widget.copyTextOverride!.trim();
+          if (prompt == null) return;
+          if (prompt.isEmpty) {
+            AppToast.info(context, context.l10n.onlineGallery_noTagInfo);
+            return;
+          }
+          try {
+            await Clipboard.setData(ClipboardData(text: prompt));
+            if (mounted) {
+              AppToast.success(context, context.l10n.onlineGallery_copied);
+            }
+          } catch (e) {
+            rethrow;
+          }
+        },
+      ),
+    ];
+  }
+
+  Widget _buildCard(BuildContext context, List<ImageCardAction> actions) {
     final theme = Theme.of(context);
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final motion = theme.appTheme;
     final activation = widget.selectionMode
         ? (widget.canSelect ? widget.onSelectionToggle : null)
         : widget.onTap;
@@ -421,7 +605,6 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
 
     final isLandscapeCard = aspectRatio > 1.3;
     final usesTouchActionMenu = interactionPolicy.usesTouchActionMenu;
-    final onAddToAgent = ImageCardActionScope.maybeOf(context)?.onAddToAgent;
     final showStatusOverlays =
         usesTouchActionMenu || (!_isHovering && !_isFocused);
     final showsCodexBadgeOnLeft =
@@ -447,9 +630,16 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
             _removeOverlay();
           },
           child: GestureDetector(
-            onTap: widget.selectionMode
-                ? (widget.canSelect ? widget.onSelectionToggle : null)
-                : widget.onTap,
+            onTap: () {
+              if (widget.canSelect &&
+                  CardSelectionScope.handleTap(
+                    context,
+                    widget.post.stableKey,
+                  )) {
+                return;
+              }
+              activation?.call();
+            },
             onLongPress: widget.onLongPress,
             child: ImageCardHoverMotion(
               hovered: showHover,
@@ -457,251 +647,222 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  AnimatedContainer(
+                  ImageCardFrame(
                     key: const ValueKey('online-gallery-card-layout'),
-                    duration: reducedMotion
-                        ? Duration.zero
-                        : motion.fastDuration,
-                    curve: motion.standardCurve,
+                    hovered: showHover,
+                    focused: _isFocused,
+                    selected: widget.isSelected,
                     height: itemHeight,
-                    decoration: BoxDecoration(
-                      color: ImageViewportSurface.background,
-                      borderRadius: BorderRadius.circular(8),
-                      border:
-                          _isFocused &&
-                              context.interactionPolicy.keyboardNavigationActive
-                          ? Border.all(
-                              color: theme.colorScheme.primary,
-                              width: 1,
-                            )
-                          : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: showHover ? 0.16 : 0,
-                          ),
-                          blurRadius: showHover ? 14 : 0,
-                          offset: Offset(0, showHover ? 6 : 0),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (!widget.loadMedia)
-                            const OnlineGalleryImagePlaceholder(loading: true)
-                          else if (gridImageRequest.url.isEmpty)
-                            _buildNoImageContent(theme)
-                          else if (widget.imageCoordinator != null)
-                            CoordinatedGalleryImage(
-                              request: gridImageRequest,
-                              coordinator: widget.imageCoordinator!,
-                              placeholder: const OnlineGalleryImagePlaceholder(
-                                loading: true,
-                              ),
-                              enabled: widget.mediaRequestActive,
-                              fadeIn: false,
-                              errorBuilder: (context, retry) =>
-                                  OnlineGalleryImagePlaceholder(
-                                    failed: true,
-                                    onRetry: retry,
-                                  ),
-                            )
-                          else
-                            CachedNetworkImage(
-                              imageUrl: gridImageRequest.url,
-                              httpHeaders: gridImageRequest.headers,
-                              cacheKey: gridImageRequest.cacheKey,
-                              fit: BoxFit.cover,
-                              memCacheWidth: gridImageRequest.targetDecodeWidth,
-                              cacheManager:
-                                  OnlineGalleryImageCacheManager.instance,
-                              errorListener: (error) {
-                                // 静默处理图片加载错误，避免控制台警告
-                              },
-                              placeholder: (context, url) =>
-                                  const OnlineGalleryImagePlaceholder(
-                                    loading: true,
-                                  ),
-                              errorWidget: (context, url, error) =>
-                                  const OnlineGalleryImagePlaceholder(
-                                    failed: true,
-                                  ),
+                    radius: 8,
+                    hoverScaleEnabled: false,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (!widget.loadMedia)
+                          const OnlineGalleryImagePlaceholder(loading: true)
+                        else if (gridImageRequest.url.isEmpty)
+                          _buildNoImageContent(theme)
+                        else if (widget.imageCoordinator != null)
+                          CoordinatedGalleryImage(
+                            request: gridImageRequest,
+                            coordinator: widget.imageCoordinator!,
+                            placeholder: const OnlineGalleryImagePlaceholder(
+                              loading: true,
                             ),
-                          if (widget.selectionMode) ...[
-                            // Selection Overlay
-                            if (widget.isSelected)
-                              Container(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.2,
+                            enabled: widget.mediaRequestActive,
+                            fadeIn: false,
+                            errorBuilder: (context, retry) =>
+                                OnlineGalleryImagePlaceholder(
+                                  failed: true,
+                                  onRetry: retry,
                                 ),
-                              ),
-                            // Disabled Overlay
-                            if (!widget.canSelect)
-                              Container(
-                                color: Colors.grey.withValues(alpha: 0.7),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.block,
-                                    color: Colors.white54,
-                                  ),
+                          )
+                        else
+                          CachedNetworkImage(
+                            imageUrl: gridImageRequest.url,
+                            httpHeaders: gridImageRequest.headers,
+                            cacheKey: gridImageRequest.cacheKey,
+                            fit: BoxFit.cover,
+                            memCacheWidth: gridImageRequest.targetDecodeWidth,
+                            cacheManager:
+                                OnlineGalleryImageCacheManager.instance,
+                            errorListener: (error) {
+                              // 静默处理图片加载错误，避免控制台警告
+                            },
+                            placeholder: (context, url) =>
+                                const OnlineGalleryImagePlaceholder(
+                                  loading: true,
                                 ),
-                              ),
-                            // Checkbox
-                            if (widget.canSelect)
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: widget.isSelected
-                                        ? theme.colorScheme.primary
-                                        : Colors.black.withValues(alpha: 0.4),
-                                    border: null,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.check,
-                                      size: 16,
-                                      color: widget.isSelected
-                                          ? theme.colorScheme.onPrimary
-                                          : Colors.transparent,
-                                    ),
-                                  ),
+                            errorWidget: (context, url, error) =>
+                                const OnlineGalleryImagePlaceholder(
+                                  failed: true,
                                 ),
+                          ),
+                        if (widget.selectionMode) ...[
+                          // Selection Overlay
+                          if (widget.isSelected)
+                            Container(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.2,
                               ),
-                          ],
-                          if (!widget.selectionMode) ...[
-                            if (showStatusOverlays)
-                              Positioned(
-                                top: usesTouchActionMenu ? 56 : 4,
-                                right: 4,
-                                child: OnlineGalleryCardStatusOverlays(
-                                  favoriteReadOnly: widget.favoriteReadOnly,
-                                  favoriteReadOnlyTooltip: context
-                                      .l10n
-                                      .onlineGallery_gelbooruReadOnly,
-                                  secondaryFavoriteIcon:
-                                      widget.secondaryFavoriteIcon,
-                                  secondaryFavoriteTooltip:
-                                      widget.secondaryFavoriteTooltip,
-                                  badgeLabel: showsCodexBadgeOnLeft
-                                      ? null
-                                      : widget.badgeLabel,
-                                  badgeUsesModelColor:
-                                      widget.badgeUsesModelColor,
-                                  mediaCount: widget.post.mediaCount,
-                                ),
+                            ),
+                          // Disabled Overlay
+                          if (!widget.canSelect)
+                            Container(
+                              color: Colors.grey.withValues(alpha: 0.7),
+                              child: const Center(
+                                child: Icon(Icons.block, color: Colors.white54),
                               ),
-                            if (widget.post.rank != null ||
-                                showsCodexBadgeOnLeft ||
-                                showsRatingBadge ||
-                                widget.post.isVideo ||
-                                widget.post.isAnimated)
-                              Positioned(
-                                top: 4,
-                                left: 4,
-                                right: usesTouchActionMenu ? 56 : null,
-                                child: OnlineGalleryCardLeftStatusOverlays(
-                                  rank: widget.post.rank,
-                                  codexBadgeLabel: showsCodexBadgeOnLeft
-                                      ? widget.badgeLabel
-                                      : null,
-                                  ratingLabel: showsRatingBadge
-                                      ? _getRatingLabel(
-                                          context,
-                                          widget.post.rating,
-                                        )
-                                      : null,
-                                  ratingColor: showsRatingBadge
-                                      ? _getRatingColor(widget.post.rating)
-                                      : null,
-                                  isVideo: widget.post.isVideo,
-                                  isAnimated: widget.post.isAnimated,
-                                  videoLabel: context.l10n.mediaType_video,
-                                  animatedLabel: context.l10n.mediaType_gif,
-                                ),
-                              ),
+                            ),
+                          // Checkbox
+                          if (widget.canSelect)
                             Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
+                              top: 8,
+                              right: 8,
                               child: Container(
-                                padding: const EdgeInsets.fromLTRB(6, 16, 6, 4),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.7),
-                                      Colors.transparent,
-                                    ],
+                                  shape: BoxShape.circle,
+                                  color: widget.isSelected
+                                      ? theme.colorScheme.primary
+                                      : Colors.black.withValues(alpha: 0.4),
+                                  border: null,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.check,
+                                    size: 16,
+                                    color: widget.isSelected
+                                        ? theme.colorScheme.onPrimary
+                                        : Colors.transparent,
                                   ),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (widget.post.title?.isNotEmpty == true)
-                                      Text(
-                                        widget.post.title!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    if (widget.post.author?.isNotEmpty == true)
-                                      Text(
-                                        widget.post.author!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 9,
-                                        ),
-                                      ),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.start,
-                                      children: [
-                                        if (widget.post.score != null)
-                                          _OverlayStatItem(
-                                            icon: Icons.arrow_upward,
-                                            value: '${widget.post.score}',
-                                          ),
-                                        if (widget.post.score != null &&
-                                            (widget.post.viewCount != null ||
-                                                widget.post.favCount != null))
-                                          const SizedBox(width: 12),
-                                        if (widget.post.viewCount != null)
-                                          _OverlayStatItem(
-                                            icon: Icons.visibility_outlined,
-                                            value: '${widget.post.viewCount}',
-                                          ),
-                                        if (widget.post.viewCount != null &&
-                                            widget.post.favCount != null)
-                                          const SizedBox(width: 12),
-                                        if (widget.post.favCount != null)
-                                          _OverlayStatItem(
-                                            icon: Icons.favorite,
-                                            value: '${widget.post.favCount}',
-                                          ),
-                                      ],
-                                    ),
+                              ),
+                            ),
+                        ],
+                        if (!widget.selectionMode) ...[
+                          if (showStatusOverlays)
+                            Positioned(
+                              top: usesTouchActionMenu ? 56 : 4,
+                              right: 4,
+                              child: OnlineGalleryCardStatusOverlays(
+                                favoriteReadOnly: widget.favoriteReadOnly,
+                                favoriteReadOnlyTooltip:
+                                    context.l10n.onlineGallery_gelbooruReadOnly,
+                                secondaryFavoriteIcon:
+                                    widget.secondaryFavoriteIcon,
+                                secondaryFavoriteTooltip:
+                                    widget.secondaryFavoriteTooltip,
+                                badgeLabel: showsCodexBadgeOnLeft
+                                    ? null
+                                    : widget.badgeLabel,
+                                badgeUsesModelColor: widget.badgeUsesModelColor,
+                                mediaCount: widget.post.mediaCount,
+                              ),
+                            ),
+                          if (widget.post.rank != null ||
+                              showsCodexBadgeOnLeft ||
+                              showsRatingBadge ||
+                              widget.post.isVideo ||
+                              widget.post.isAnimated)
+                            Positioned(
+                              top: 4,
+                              left: 4,
+                              right: usesTouchActionMenu ? 56 : null,
+                              child: OnlineGalleryCardLeftStatusOverlays(
+                                rank: widget.post.rank,
+                                codexBadgeLabel: showsCodexBadgeOnLeft
+                                    ? widget.badgeLabel
+                                    : null,
+                                ratingLabel: showsRatingBadge
+                                    ? _getRatingLabel(
+                                        context,
+                                        widget.post.rating,
+                                      )
+                                    : null,
+                                ratingColor: showsRatingBadge
+                                    ? _getRatingColor(widget.post.rating)
+                                    : null,
+                                isVideo: widget.post.isVideo,
+                                isAnimated: widget.post.isAnimated,
+                                videoLabel: context.l10n.mediaType_video,
+                                animatedLabel: context.l10n.mediaType_gif,
+                              ),
+                            ),
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(6, 16, 6, 4),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.7),
+                                    Colors.transparent,
                                   ],
                                 ),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.post.title?.isNotEmpty == true)
+                                    Text(
+                                      widget.post.title!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  if (widget.post.author?.isNotEmpty == true)
+                                    Text(
+                                      widget.post.author!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      if (widget.post.score != null)
+                                        _OverlayStatItem(
+                                          icon: Icons.arrow_upward,
+                                          value: '${widget.post.score}',
+                                        ),
+                                      if (widget.post.score != null &&
+                                          (widget.post.viewCount != null ||
+                                              widget.post.favCount != null))
+                                        const SizedBox(width: 12),
+                                      if (widget.post.viewCount != null)
+                                        _OverlayStatItem(
+                                          icon: Icons.visibility_outlined,
+                                          value: '${widget.post.viewCount}',
+                                        ),
+                                      if (widget.post.viewCount != null &&
+                                          widget.post.favCount != null)
+                                        const SizedBox(width: 12),
+                                      if (widget.post.favCount != null)
+                                        _OverlayStatItem(
+                                          icon: Icons.favorite,
+                                          value: '${widget.post.favCount}',
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                   if (!widget.selectionMode)
@@ -723,216 +884,7 @@ class _DanbooruPostCardState extends State<DanbooruPostCard> {
                             direction: isLandscapeCard
                                 ? Axis.horizontal
                                 : Axis.vertical,
-                            buttons: [
-                              CardActionButtonConfig(
-                                icon: Icons.send,
-                                tooltip: context
-                                    .l10n
-                                    .onlineGallery_sendToTextToImage,
-                                onPressed: () => _handleSendToGeneration(ref),
-                              ),
-                              if (widget.showFavoriteAction &&
-                                  !widget.favoriteReadOnly &&
-                                  widget.onFavoriteToggle != null)
-                                CardActionButtonConfig(
-                                  icon: widget.isFavorited
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  tooltip: [
-                                    widget.isFavorited
-                                        ? context.l10n.common_unfavorite
-                                        : context.l10n.common_favorite,
-                                    if (widget.secondaryFavoriteTooltip != null)
-                                      widget.secondaryFavoriteTooltip!,
-                                  ].join(' · '),
-                                  iconColor: widget.isFavorited
-                                      ? Colors.red
-                                      : Colors.white,
-                                  isLoading: widget.isFavoriteLoading,
-                                  onPressed: widget.onFavoriteToggle!,
-                                ),
-                              if (onAddToAgent != null)
-                                CardActionButtonConfig(
-                                  icon: Icons.auto_awesome_outlined,
-                                  tooltip: context.l10n.agentChat_addResource,
-                                  onPressed: onAddToAgent,
-                                ),
-                              if (widget.post.bestQualityUrl.isNotEmpty)
-                                CardActionButtonConfig(
-                                  icon: Icons.download,
-                                  tooltip: context
-                                      .l10n
-                                      .onlineGallery_downloadOriginal,
-                                  onPressed: _handleDownload,
-                                ),
-                              CardActionButtonConfig(
-                                icon: Icons.playlist_add,
-                                tooltip: context.l10n.onlineGallery_addToQueue,
-                                onPressed: () async {
-                                  final prompt = _promptForGenerationAction();
-                                  if (prompt == null) return;
-                                  final negativePrompt =
-                                      widget.negativePromptOverride ?? '';
-                                  final task = ReplicationTask.create(
-                                    prompt: prompt,
-                                    negativePrompt: negativePrompt,
-                                    applyNegativePrompt: negativePrompt
-                                        .trim()
-                                        .isNotEmpty,
-                                    thumbnailUrl: widget.post.previewUrl,
-                                    source: ReplicationTaskSource.online,
-                                    characterPrompts:
-                                        widget.post.sourceId ==
-                                                GallerySourceId.quickTagCloud ||
-                                            widget.characterPrompts.isNotEmpty
-                                        ? [
-                                            for (final character
-                                                in widget.characterPrompts)
-                                              ReplicationCharacterPromptSnapshot(
-                                                prompt: character.prompt,
-                                                negativePrompt:
-                                                    character.negativePrompt,
-                                              ),
-                                          ]
-                                        : null,
-                                  );
-                                  final success = await ref
-                                      .read(
-                                        replicationQueueNotifierProvider
-                                            .notifier,
-                                      )
-                                      .add(task);
-                                  if (context.mounted) {
-                                    if (success) {
-                                      final count = ref.read(
-                                        replicationQueueNotifierProvider.select(
-                                          (state) => state.count,
-                                        ),
-                                      );
-                                      AppToast.success(
-                                        context,
-                                        context.l10n
-                                            .onlineGallery_addedToQueueWithCount(
-                                              count,
-                                            ),
-                                      );
-                                    } else {
-                                      AppToast.warning(
-                                        context,
-                                        context.l10n.onlineGallery_queueFullMax,
-                                      );
-                                    }
-                                  }
-                                },
-                              ),
-                              if (widget.post.mediaCapability.isFlutterImage &&
-                                  widget
-                                      .post
-                                      .mediaCapability
-                                      .imageDisplayUrl
-                                      .isNotEmpty)
-                                CardActionButtonConfig(
-                                  icon: Icons.manage_search_rounded,
-                                  tooltip: context
-                                      .l10n
-                                      .onlineGallery_sendToReversePrompt,
-                                  onPressed: () async {
-                                    final imageUrl = widget
-                                        .post
-                                        .mediaCapability
-                                        .imageDisplayUrl;
-                                    if (imageUrl.isEmpty) {
-                                      AppToast.warning(
-                                        context,
-                                        context.l10n.onlineGallery_noImageUrl,
-                                      );
-                                      return;
-                                    }
-                                    try {
-                                      final file = await OnlineGalleryImageCacheManager
-                                          .instance
-                                          .getSingleFile(
-                                            imageUrl,
-                                            key:
-                                                onlineGalleryImageCacheKeyForUrl(
-                                                  imageUrl,
-                                                ),
-                                            headers:
-                                                onlineGalleryImageHeadersForUrl(
-                                                  imageUrl,
-                                                ),
-                                          );
-                                      final bytes = await file.readAsBytes();
-                                      await ref
-                                          .read(reversePromptProvider.notifier)
-                                          .addImage(
-                                            bytes,
-                                            name:
-                                                '${widget.post.sourceId.key}_${widget.post.sourceWorkId}'
-                                                    .replaceAll(
-                                                      RegExp(
-                                                        r'[^A-Za-z0-9._-]',
-                                                      ),
-                                                      '_',
-                                                    ),
-                                          );
-                                      if (context.mounted) {
-                                        context.go('/');
-                                        AppToast.info(
-                                          context,
-                                          context
-                                              .l10n
-                                              .onlineGallery_sentToReversePrompt,
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        AppToast.error(
-                                          context,
-                                          context.l10n
-                                              .onlineGallery_reversePromptSendFailed(
-                                                '$e',
-                                              ),
-                                        );
-                                      }
-                                    }
-                                  },
-                                ),
-                              CardActionButtonConfig(
-                                icon: Icons.copy,
-                                tooltip:
-                                    widget.copyTooltip ??
-                                    (widget.promptOverride != null
-                                        ? context.l10n.localGallery_copyPrompt
-                                        : context.l10n.onlineGallery_copyTags),
-                                onPressed: () async {
-                                  final prompt = widget.copyTextOverride == null
-                                      ? _promptForAction()
-                                      : widget.copyTextOverride!.trim();
-                                  if (prompt == null) return;
-                                  if (prompt.isEmpty) {
-                                    AppToast.info(
-                                      context,
-                                      context.l10n.onlineGallery_noTagInfo,
-                                    );
-                                    return;
-                                  }
-                                  try {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: prompt),
-                                    );
-                                    if (context.mounted) {
-                                      AppToast.success(
-                                        context,
-                                        context.l10n.onlineGallery_copied,
-                                      );
-                                    }
-                                  } catch (e) {
-                                    // ignore
-                                  }
-                                },
-                              ),
-                            ],
+                            buttons: actions,
                           );
                         },
                       ),

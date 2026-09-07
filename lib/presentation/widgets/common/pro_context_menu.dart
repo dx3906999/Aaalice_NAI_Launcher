@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,9 +11,11 @@ class ProMenuItem {
   final String id;
   final String label;
   final IconData? icon;
-  final VoidCallback? onTap;
+  final FutureOr<void> Function()? onTap;
   final bool isDivider;
   final bool isDanger;
+  final bool enabled;
+  final String? disabledReason;
 
   const ProMenuItem({
     required this.id,
@@ -20,6 +24,8 @@ class ProMenuItem {
     this.onTap,
     this.isDivider = false,
     this.isDanger = false,
+    this.enabled = true,
+    this.disabledReason,
   });
 
   const ProMenuItem.divider()
@@ -28,7 +34,9 @@ class ProMenuItem {
       icon = null,
       onTap = null,
       isDivider = true,
-      isDanger = false;
+      isDanger = false,
+      enabled = false,
+      disabledReason = null;
 }
 
 /// 专业上下文菜单组件
@@ -55,10 +63,11 @@ class ProContextMenu extends StatefulWidget {
     BuildContext context, {
     double baseWidth = minimumWidth,
   }) {
-    final availableWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
-      0.0,
-      maximumWidth,
-    );
+    final availableWidth =
+        (MediaQuery.sizeOf(context).width -
+                MediaQuery.paddingOf(context).horizontal -
+                32)
+            .clamp(0.0, maximumWidth);
     if (availableWidth <= baseWidth) return availableWidth;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     return (baseWidth + (textScale - 1).clamp(0, 2) * 56).clamp(
@@ -100,7 +109,8 @@ class _ProContextMenuState extends State<ProContextMenu> {
     ];
     _selectableIndexes = [
       for (var index = 0; index < widget.items.length; index++)
-        if (!widget.items[index].isDivider) index,
+        if (!widget.items[index].isDivider && widget.items[index].enabled)
+          index,
     ];
   }
 
@@ -237,7 +247,11 @@ class _ContextMenuItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final itemColor = item.isDanger ? colorScheme.error : colorScheme.onSurface;
+    final itemColor = !item.enabled
+        ? colorScheme.onSurface.withValues(alpha: 0.38)
+        : item.isDanger
+        ? colorScheme.error
+        : colorScheme.onSurface;
     final extent = context.interactionPolicy.minimumControlExtent;
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -247,12 +261,19 @@ class _ContextMenuItem extends StatelessWidget {
       order: NumericFocusOrder(order),
       child: Semantics(
         button: true,
+        enabled: item.enabled,
         label: item.label,
         child: ExcludeSemantics(
           child: InkWell(
             focusNode: focusNode,
-            onTap: () => onSelect(item),
+            canRequestFocus: item.enabled,
+            // Consume disabled-row taps so the enclosing outside-dismiss
+            // gesture cannot close the menu through this surface.
+            onTap: () {
+              if (item.enabled) onSelect(item);
+            },
             overlayColor: WidgetStateProperty.resolveWith((states) {
+              if (!item.enabled) return Colors.transparent;
               if (!states.contains(WidgetState.hovered) &&
                   !states.contains(WidgetState.focused) &&
                   !states.contains(WidgetState.pressed)) {
@@ -274,11 +295,24 @@ class _ContextMenuItem extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: Text(
-                      item.label,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelLarge?.copyWith(color: itemColor),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          item.label,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.labelLarge?.copyWith(color: itemColor),
+                        ),
+                        if (item.disabledReason != null)
+                          Text(
+                            item.disabledReason!,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(color: itemColor),
+                          ),
+                      ],
                     ),
                   ),
                 ],

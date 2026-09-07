@@ -147,18 +147,20 @@ Future<void> _pumpGrid(
   );
 
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: GalleryGrid(
-          images: images,
-          columns: columns,
-          spacing: 12,
-          padding: const EdgeInsets.all(12),
-          selectedIndices: selectedIndices,
-          enableDrag: false,
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: GalleryGrid(
+            images: images,
+            columns: columns,
+            spacing: 12,
+            padding: const EdgeInsets.all(12),
+            selectedIndices: selectedIndices,
+            enableDrag: false,
+          ),
         ),
       ),
     ),

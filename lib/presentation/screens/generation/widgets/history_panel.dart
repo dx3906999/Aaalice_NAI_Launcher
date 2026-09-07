@@ -1,8 +1,12 @@
+import '../../../providers/generation/image_card_selection_provider.dart';
+import '../../../selection/card_selection_scope.dart';
+import '../../../widgets/common/image_card_action.dart';
+import '../../../widgets/common/image_card_action_dispatch.dart';
+import '../../../widgets/common/image_card_batch_scope.dart';
+import '../services/generation_image_batch_actions.dart';
 import 'dart:async';
 import 'dart:io';
-import '../../../utils/zip_export_progress.dart';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -11,15 +15,11 @@ import 'package:path/path.dart' as p;
 
 import '../../../../core/enums/precise_ref_type.dart';
 import '../../../../core/platform/platform_capabilities.dart';
-import '../../../../core/services/android_media_store_service.dart';
-import '../../../../core/services/file_export_service.dart';
 import '../../../../core/utils/localization_extension.dart';
 import '../../../../core/utils/file_explorer_utils.dart';
 import '../../../../core/utils/image_save_utils.dart';
 import '../../../../core/utils/image_share_sanitizer.dart';
-import '../../../../core/utils/keyboard_modifier_utils.dart';
 import '../../../../core/utils/vibe_file_parser.dart';
-import '../../../../core/utils/zip_utils.dart';
 import '../../../../data/services/alias_resolver_service.dart';
 import '../../../adaptive/interaction_policy.dart';
 import '../../../providers/layout_state_provider.dart';
@@ -102,7 +102,10 @@ class HistoryPanel extends ConsumerStatefulWidget {
 }
 
 class _HistoryPanelState extends ConsumerState<HistoryPanel> {
-  final Set<String> _selectedIds = {};
+  Set<String> get _selectedIds =>
+      ref.read(generationImageCardSelectionProvider).selectedIds;
+  GenerationImageCardSelection get _selection =>
+      ref.read(generationImageCardSelectionProvider.notifier);
   late final ShareImagePreparationService _sharePreparationService;
   Timer? _historyScrollIdleTimer;
   Timer? _historyPreheatTimer;
@@ -152,6 +155,7 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(imageGenerationNotifierProvider);
+    final selection = ref.watch(generationImageCardSelectionProvider);
     ref.watch(copyDragWatermarkProvider);
     final stripMetadata = ref.watch(
       shareImageSettingsProvider.select(
@@ -166,200 +170,242 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
         : null;
     _scheduleSharePreparationMaintenance(state, stripMetadata);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 标题栏（嵌入模式下由外层 Tab 栏承担，仅保留操作按钮）
-        if (widget.embedded)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
-            child: Row(
-              children: [
-                const Spacer(),
-                if (state.history.isNotEmpty ||
-                    state.currentImages.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_getAllSelectableImages(state).length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
+    final selectedImages = state.selectableMergedImages
+        .where((image) => selection.isSelected(image.id))
+        .toList();
+    return ImageCardBatchScope(
+      runner: _selection.actionRunner,
+      targetIds: selection.selectedIds,
+      actions: GenerationImageBatchActions(
+        context: context,
+        images: selectedImages,
+        gallery: ref.read(localGalleryNotifierProvider.notifier),
+        selection: _selection,
+      ).build(),
+      child: CardSelectionScope(
+        selection: selection,
+        commands: _selection,
+        orderedIds: state.selectableMergedImages
+            .map((image) => image.id)
+            .toList(),
+        child: CardSelectionShortcuts(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 标题栏（嵌入模式下由外层 Tab 栏承担，仅保留操作按钮）
+              if (widget.embedded)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      if (state.history.isNotEmpty ||
+                          state.currentImages.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${_getAllSelectableImages(state).length}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      if (state.history.isNotEmpty ||
+                          state.currentImages.isNotEmpty)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              final allImages = _getAllSelectableImages(state);
+                              if (_selectedIds.length == allImages.length) {
+                                _selection.clearSelection();
+                              } else {
+                                _selection.clearSelection();
+                                _selection.enter();
+                                _selection.selectAll(
+                                  allImages.map((img) => img.id),
+                                );
+                              }
+                            });
+                          },
+                          icon: Icon(
+                            _selectedIds.length ==
+                                    _getAllSelectableImages(state).length
+                                ? Icons.deselect
+                                : Icons.select_all,
+                            size: 18,
+                          ),
+                          tooltip:
+                              _selectedIds.length ==
+                                  _getAllSelectableImages(state).length
+                              ? context.l10n.common_deselectAll
+                              : context.l10n.common_selectAll,
+                          style: IconButton.styleFrom(
+                            foregroundColor: theme.colorScheme.primary,
+                          ),
+                          visualDensity:
+                              context.interactionPolicy.touchAvailable
+                              ? VisualDensity.standard
+                              : VisualDensity.compact,
+                          constraints: BoxConstraints.tightFor(
+                            width:
+                                context.interactionPolicy.minimumControlExtent,
+                            height:
+                                context.interactionPolicy.minimumControlExtent,
+                          ),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                      if (state.history.isNotEmpty ||
+                          state.currentImages.isNotEmpty)
+                        IconButton(
+                          onPressed: () {
+                            _showClearDialog(context, ref);
+                          },
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          tooltip: context.l10n.common_clear,
+                          style: IconButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                          ),
+                          visualDensity:
+                              context.interactionPolicy.touchAvailable
+                              ? VisualDensity.standard
+                              : VisualDensity.compact,
+                          constraints: BoxConstraints.tightFor(
+                            width:
+                                context.interactionPolicy.minimumControlExtent,
+                            height:
+                                context.interactionPolicy.minimumControlExtent,
+                          ),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                WorkspacePanelHeader(
+                  leading: _buildCollapseButton(),
+                  icon: Icons.history_rounded,
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          context.l10n.generation_historyRecord,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (state.history.isNotEmpty ||
+                          state.currentImages.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${_getAllSelectableImages(state).length}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                ],
-                if (state.history.isNotEmpty || state.currentImages.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        final allImages = _getAllSelectableImages(state);
-                        if (_selectedIds.length == allImages.length) {
-                          _selectedIds.clear();
-                        } else {
-                          _selectedIds.clear();
-                          _selectedIds.addAll(allImages.map((img) => img.id));
-                        }
-                      });
-                    },
-                    icon: Icon(
-                      _selectedIds.length ==
-                              _getAllSelectableImages(state).length
-                          ? Icons.deselect
-                          : Icons.select_all,
-                      size: 18,
-                    ),
-                    tooltip:
-                        _selectedIds.length ==
-                            _getAllSelectableImages(state).length
-                        ? context.l10n.common_deselectAll
-                        : context.l10n.common_selectAll,
-                    style: IconButton.styleFrom(
-                      foregroundColor: theme.colorScheme.primary,
-                    ),
-                    visualDensity: context.interactionPolicy.touchAvailable
-                        ? VisualDensity.standard
-                        : VisualDensity.compact,
-                    constraints: BoxConstraints.tightFor(
-                      width: context.interactionPolicy.minimumControlExtent,
-                      height: context.interactionPolicy.minimumControlExtent,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                  ),
-                if (state.history.isNotEmpty || state.currentImages.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      _showClearDialog(context, ref);
-                    },
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    tooltip: context.l10n.common_clear,
-                    style: IconButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                    ),
-                    visualDensity: context.interactionPolicy.touchAvailable
-                        ? VisualDensity.standard
-                        : VisualDensity.compact,
-                    constraints: BoxConstraints.tightFor(
-                      width: context.interactionPolicy.minimumControlExtent,
-                      height: context.interactionPolicy.minimumControlExtent,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                  ),
-              ],
-            ),
-          )
-        else
-          WorkspacePanelHeader(
-            leading: _buildCollapseButton(),
-            icon: Icons.history_rounded,
-            title: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    context.l10n.generation_historyRecord,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (state.history.isNotEmpty ||
-                    state.currentImages.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${_getAllSelectableImages(state).length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
+                  actions: [
+                    if (state.history.isNotEmpty ||
+                        state.currentImages.isNotEmpty)
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            final allImages = _getAllSelectableImages(state);
+                            if (_selectedIds.length == allImages.length) {
+                              _selection.clearSelection();
+                            } else {
+                              _selection.clearSelection();
+                              _selection.enter();
+                              _selection.selectAll(
+                                allImages.map((img) => img.id),
+                              );
+                            }
+                          });
+                        },
+                        icon: Icon(
+                          _selectedIds.length ==
+                                  _getAllSelectableImages(state).length
+                              ? Icons.deselect
+                              : Icons.select_all,
+                          size: 20,
+                        ),
+                        tooltip:
+                            _selectedIds.length ==
+                                _getAllSelectableImages(state).length
+                            ? context.l10n.common_deselectAll
+                            : context.l10n.common_selectAll,
+                        style: IconButton.styleFrom(
+                          foregroundColor: theme.colorScheme.primary,
+                        ),
+                        constraints: BoxConstraints.tightFor(
+                          width: context.interactionPolicy.minimumControlExtent,
+                          height:
+                              context.interactionPolicy.minimumControlExtent,
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            actions: [
-              if (state.history.isNotEmpty || state.currentImages.isNotEmpty)
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      final allImages = _getAllSelectableImages(state);
-                      if (_selectedIds.length == allImages.length) {
-                        _selectedIds.clear();
-                      } else {
-                        _selectedIds.clear();
-                        _selectedIds.addAll(allImages.map((img) => img.id));
-                      }
-                    });
-                  },
-                  icon: Icon(
-                    _selectedIds.length == _getAllSelectableImages(state).length
-                        ? Icons.deselect
-                        : Icons.select_all,
-                    size: 20,
-                  ),
-                  tooltip:
-                      _selectedIds.length ==
-                          _getAllSelectableImages(state).length
-                      ? context.l10n.common_deselectAll
-                      : context.l10n.common_selectAll,
-                  style: IconButton.styleFrom(
-                    foregroundColor: theme.colorScheme.primary,
-                  ),
-                  constraints: BoxConstraints.tightFor(
-                    width: context.interactionPolicy.minimumControlExtent,
-                    height: context.interactionPolicy.minimumControlExtent,
-                  ),
+                    if (state.history.isNotEmpty ||
+                        state.currentImages.isNotEmpty)
+                      IconButton(
+                        onPressed: () => _showClearDialog(context, ref),
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        tooltip: context.l10n.common_clear,
+                        style: IconButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                        ),
+                        constraints: BoxConstraints.tightFor(
+                          width: context.interactionPolicy.minimumControlExtent,
+                          height:
+                              context.interactionPolicy.minimumControlExtent,
+                        ),
+                      ),
+                  ],
                 ),
-              if (state.history.isNotEmpty || state.currentImages.isNotEmpty)
-                IconButton(
-                  onPressed: () => _showClearDialog(context, ref),
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  tooltip: context.l10n.common_clear,
-                  style: IconButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error,
-                  ),
-                  constraints: BoxConstraints.tightFor(
-                    width: context.interactionPolicy.minimumControlExtent,
-                    height: context.interactionPolicy.minimumControlExtent,
-                  ),
-                ),
+              if (widget.embedded) const ThemedDivider(height: 1),
+
+              // 历史列表
+              Expanded(
+                child: state.history.isEmpty && !_hasCurrentGeneration(state)
+                    ? _buildEmptyState(theme, context)
+                    : _buildHistoryGrid(
+                        state,
+                        theme,
+                        ref,
+                        stripMetadata: stripMetadata,
+                        clickBehavior: clickBehavior,
+                        selectedPreviewId: selectedPreviewId,
+                      ),
+              ),
+
+              // 底部操作栏（有选中时显示）
+              if (_selectedIds.isNotEmpty)
+                _buildBottomActions(context, state, theme),
             ],
           ),
-        if (widget.embedded) const ThemedDivider(height: 1),
-
-        // 历史列表
-        Expanded(
-          child: state.history.isEmpty && !_hasCurrentGeneration(state)
-              ? _buildEmptyState(theme, context)
-              : _buildHistoryGrid(
-                  state,
-                  theme,
-                  ref,
-                  stripMetadata: stripMetadata,
-                  clickBehavior: clickBehavior,
-                  selectedPreviewId: selectedPreviewId,
-                ),
         ),
-
-        // 底部操作栏（有选中时显示）
-        if (_selectedIds.isNotEmpty) _buildBottomActions(context, state, theme),
-      ],
+      ),
     );
   }
 
@@ -751,6 +797,9 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
                             isFavorite: isFavorite,
                             dragPreparationReady: dragPreparationReady,
                             enableSelection: historyImage.canBulkSelect,
+                            selectionMode: ref
+                                .read(generationImageCardSelectionProvider)
+                                .isActive,
                             enableSaveAction: historyImage.canSave,
                             enableCopyAction: historyImage.canSave,
                             statusBadgeLabel: isFailedSnapshot
@@ -773,9 +822,9 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
                               }
                               setState(() {
                                 if (selected) {
-                                  _selectedIds.add(historyImage.id);
+                                  _selection.enterAndSelect(historyImage.id);
                                 } else {
-                                  _selectedIds.remove(historyImage.id);
+                                  _selection.deselect(historyImage.id);
                                 }
                               });
                             },
@@ -789,11 +838,11 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
                                     HistoryClickBehavior.selectPreview
                                 ? () => _showLinkedDetail(context, historyImage)
                                 : null,
-                            onLongPress:
-                                clickBehavior ==
-                                    HistoryClickBehavior.selectPreview
-                                ? () => _showLinkedDetail(context, historyImage)
-                                : null,
+                            onLongPress: historyImage.canBulkSelect
+                                ? () =>
+                                      _selection.enterAndSelect(historyImage.id)
+                                : () =>
+                                      _showLinkedDetail(context, historyImage),
                             onFullscreen: () =>
                                 _showLinkedDetail(context, historyImage),
                             enableContextMenu: true,
@@ -999,6 +1048,9 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
           dragPreparationReady: dragPreparationReady,
           completionPreview: state.completionPreviews[image.id],
           enableSelection: image.canBulkSelect,
+          selectionMode: ref
+              .read(generationImageCardSelectionProvider)
+              .isActive,
           enableSaveAction: image.canSave,
           enableCopyAction: image.canSave,
           statusBadgeLabel: isFailedSnapshot
@@ -1016,9 +1068,9 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
             }
             setState(() {
               if (selected) {
-                _selectedIds.add(image.id);
+                _selection.enterAndSelect(image.id);
               } else {
-                _selectedIds.remove(image.id);
+                _selection.deselect(image.id);
               }
             });
           },
@@ -1026,9 +1078,9 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
           onDoubleTap: clickBehavior == HistoryClickBehavior.selectPreview
               ? () => _showLinkedDetail(context, image)
               : null,
-          onLongPress: clickBehavior == HistoryClickBehavior.selectPreview
-              ? () => _showLinkedDetail(context, image)
-              : null,
+          onLongPress: image.canBulkSelect
+              ? () => _selection.enterAndSelect(image.id)
+              : () => _showLinkedDetail(context, image),
           onFullscreen: () => _showLinkedDetail(context, image),
           enableContextMenu: true,
           hoverEffectsEnabled: !_isHistoryScrolling,
@@ -1203,26 +1255,11 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
     });
   }
 
-  bool get _isMultiSelectModifierPressed {
-    return isPrimarySelectionModifierPressed();
-  }
-
-  void _toggleSelectedImage(GeneratedImage image) {
-    if (!image.canBulkSelect) return;
-    setState(() {
-      if (!_selectedIds.add(image.id)) _selectedIds.remove(image.id);
-    });
-  }
-
   void _handleImageTap(
     BuildContext context,
     GeneratedImage image,
     HistoryClickBehavior behavior,
   ) {
-    if (_isMultiSelectModifierPressed && image.canBulkSelect) {
-      _toggleSelectedImage(image);
-      return;
-    }
     if (behavior == HistoryClickBehavior.selectPreview) {
       ref.read(generationPreviewSelectionProvider.notifier).select(image.id);
       ref.read(generationPreviewFocusNodeProvider).requestFocus();
@@ -1458,238 +1495,61 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
     BuildContext context,
     ImageGenerationState state,
     ThemeData theme,
-  ) {
-    final policyExtent = context.interactionPolicy.minimumControlExtent;
-    final minimumHeight = policyExtent < 44 ? 44.0 : policyExtent;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+  ) => Builder(
+    builder: (context) {
+      final batch = ImageCardBatchScope.maybeOf(context)!;
+      final extent = context.interactionPolicy.minimumControlExtent;
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border(
+            top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          // 打包按钮
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _packSelectedImages(context, state),
-              icon: const Icon(Icons.archive_outlined, size: 20),
-              label: Text(
-                '${context.l10n.common_pack} (${_selectedIds.length})',
+        child: Row(
+          children: [
+            for (var i = 0; i < batch.actions.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: _buildBatchButton(
+                  context,
+                  batch.actions[i],
+                  batch.targetIds.length,
+                  extent < 44 ? 44 : extent,
+                ),
               ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: Size(0, minimumHeight),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 保存按钮
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: () => _saveSelectedImages(context, state),
-              icon: const Icon(Icons.save_alt, size: 20),
-              label: Text(
-                '${context.l10n.image_save} (${_selectedIds.length})',
-              ),
-              style: FilledButton.styleFrom(
-                minimumSize: Size(0, minimumHeight),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _saveSelectedImages(
-    BuildContext context,
-    ImageGenerationState state,
-  ) async {
-    if (_selectedIds.isEmpty) return;
-
-    try {
-      final saveDirPath = await GalleryFolderRepository.instance.getRootPath();
-      if (saveDirPath == null) return;
-
-      // 从所有可选图像中查找选中的图像
-      final allImages = _getAllSelectableImages(state);
-      final selectedImages = allImages
-          .where((img) => _selectedIds.contains(img.id))
-          .toList();
-
-      Object? systemGalleryError;
-      // 原子保存：日期分类路径 + 独占防冲突 + 失败清理，全部在工具内完成
-      for (int i = 0; i < selectedImages.length; i++) {
-        final image = selectedImages[i];
-        final filePath = await ImageSaveUtils.saveBytesToDatedPath(
-          rootPath: saveDirPath,
-          bytes: image.bytes,
-          seed: await ImageSaveUtils.resolveSeed(
-            metadata: image.metadata,
-            bytes: image.bytes,
-          ),
-        );
-        if (PlatformCapabilities.current.supportsSystemGalleryExport) {
-          try {
-            await AndroidMediaStoreService.savePng(
-              bytes: image.bytes,
-              fileName: p.basename(filePath),
-            );
-          } catch (error) {
-            systemGalleryError ??= error;
-          }
-        }
-      }
-
-      ref.read(localGalleryNotifierProvider.notifier).refresh();
-
-      if (context.mounted) {
-        if (systemGalleryError != null) {
-          AppToast.warning(
-            context,
-            context.l10n.image_savedAppOnly(systemGalleryError.toString()),
-          );
-        } else {
-          AppToast.success(
-            context,
-            PlatformCapabilities.current.supportsSystemGalleryExport
-                ? context.l10n.image_savedToSystemGallery
-                : context.l10n.image_imageSaved(saveDirPath),
-          );
-        }
-        setState(() {
-          _selectedIds.clear();
-        });
-      }
-    } catch (e) {
-      if (context.mounted) {
-        AppToast.error(context, context.l10n.image_saveFailed(e.toString()));
-      }
-    }
-  }
-
-  /// 打包选中的图片成压缩包
-  Future<void> _packSelectedImages(
-    BuildContext context,
-    ImageGenerationState state,
-  ) async {
-    if (_selectedIds.isEmpty) return;
-
-    final defaultName = 'images_${DateTime.now().millisecondsSinceEpoch}';
-    final fileName = '$defaultName.zip';
-    String? desktopOutputPath;
-    if (!PlatformCapabilities.current.supportsDocumentFileExport) {
-      final outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: context.l10n.localGallery_saveZipArchive,
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
+            ],
+          ],
+        ),
       );
-      if (outputPath == null || !context.mounted) return;
-      desktopOutputPath = outputPath.endsWith('.zip')
-          ? outputPath
-          : '$outputPath.zip';
-    }
+    },
+  );
 
-    final progress = ZipExportProgress(context, _selectedIds.length);
-
-    Directory? tempDir;
-    try {
-      // 先将选中的图片保存到临时目录
-      tempDir = await Directory.systemTemp.createTemp('nai_pack_');
-      final imagePaths = <String>[];
-
-      final allImages = _getAllSelectableImages(state);
-      final selectedImages = allImages
-          .where((img) => _selectedIds.contains(img.id))
-          .toList();
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      for (int i = 0; i < selectedImages.length; i++) {
-        final imageFileName = 'NAI_${timestamp}_${i + 1}.png';
-        final file = File('${tempDir.path}/$imageFileName');
-        await file.writeAsBytes(selectedImages[i].bytes);
-        imagePaths.add(file.path);
-      }
-
-      late ZipCreationResult result;
-      String? savedLocation;
-      if (PlatformCapabilities.current.supportsDocumentFileExport) {
-        savedLocation = await FileExportService.withTemporaryOutput(
-          fileName: fileName,
-          action: (temporaryPath) async {
-            result = await ZipUtils.createZipFromImagesDetailed(
-              imagePaths,
-              temporaryPath,
-              onProgress: progress.update,
-            );
-            if (!result.succeeded || !context.mounted) return null;
-            return FileExportService.saveFileFromPath(
-              sourcePath: temporaryPath,
-              fileName: fileName,
-              dialogTitle: context.l10n.localGallery_saveZipArchive,
-              mimeType: 'application/zip',
-              allowedExtensions: const ['zip'],
-            );
-          },
-        );
-      } else {
-        result = await ZipUtils.createZipFromImagesDetailed(
-          imagePaths,
-          desktopOutputPath!,
-          onProgress: progress.update,
-        );
-        savedLocation = desktopOutputPath;
-      }
-
-      if (context.mounted) {
-        if (result.succeeded && savedLocation != null) {
-          if (result.isPartial) {
-            progress.controller.dismiss();
-            AppToast.warning(
-              context,
-              context.l10n.localGallery_packedImagesWithFailures(
-                result.exportedCount,
-                result.failures.length,
-              ),
-            );
-          } else {
-            progress.controller.complete(
-              message: context.l10n.localGallery_packedImages(
-                result.exportedCount,
-              ),
-            );
-          }
-          setState(() {
-            if (!result.isPartial) _selectedIds.clear();
-          });
-        } else if (!result.succeeded) {
-          progress.controller.fail(
-            message: context.l10n.localGallery_packFailedWithDetails(
-              result.error ?? context.l10n.localGallery_packFailed,
-            ),
+  Widget _buildBatchButton(
+    BuildContext context,
+    ImageCardAction action,
+    int count,
+    double height,
+  ) {
+    final onPressed = action.canInvoke
+        ? () => unawaited(dispatchImageCardAction(context, action))
+        : null;
+    final label = Text('${action.label} ($count)');
+    final icon = Icon(action.icon, size: 20);
+    return action.isPrimary
+        ? FilledButton.icon(
+            onPressed: onPressed,
+            icon: icon,
+            label: label,
+            style: FilledButton.styleFrom(minimumSize: Size(0, height)),
+          )
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: icon,
+            label: label,
+            style: OutlinedButton.styleFrom(minimumSize: Size(0, height)),
           );
-        } else {
-          progress.controller.dismiss();
-        }
-      } else {
-        progress.controller.dismiss();
-      }
-    } catch (e) {
-      progress.controller.dismiss();
-      if (context.mounted) {
-        AppToast.error(
-          context,
-          context.l10n.toast_packFailedWithError(e.toString()),
-        );
-      }
-    } finally {
-      if (tempDir != null && await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    }
   }
 
   /// 在文件夹中定位图片。已保存的图片直接定位原文件，未保存时先保存再定位。
@@ -1831,7 +1691,7 @@ class _HistoryPanelState extends ConsumerState<HistoryPanel> {
     if (confirmed) {
       ref.read(imageGenerationNotifierProvider.notifier).clearHistory();
       setState(() {
-        _selectedIds.clear();
+        _selection.clearSelection();
       });
     }
   }

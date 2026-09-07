@@ -1,4 +1,25 @@
 {
+  "cardAction_singleScope": "This item only",
+  "cardDrag_preparingCount": "Preparing {count} resources to drag…",
+  "@cardDrag_preparingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cardDrop_unsupported": "This target does not support this resource set or item count. Use the matching resource import target.",
+  "cardAction_batchFailed": "{failed} of {total} items failed",
+  "@cardAction_batchFailed": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "generation_enhancementFailed": "Enhancement failed; original retained",
   "generation_enhancementRetryHint": "Choose DLSS NR in the image actions to retry enhancement only.",
 

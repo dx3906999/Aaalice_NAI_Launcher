@@ -1,3 +1,4 @@
+import '../../../helpers/card_drop_test_utils.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -176,7 +177,10 @@ void main() {
       ),
     );
     final region = tester.widget<DropRegion>(find.byType(DropRegion));
-    final session = _TestDropSession();
+    final session = TestCardDropSession([
+      TestCardDropItem(formats: [Formats.png]),
+    ]);
+    addTearDown(session.dispose);
     final operation = region.onDropOver(
       DropOverEvent(
         session: session,
@@ -228,19 +232,6 @@ Future<void> _pumpCard(
       ),
     ),
   );
-}
-
-class _TestDropSession with Diagnosticable implements DropSession {
-  final _disposed = ValueNotifier(false);
-
-  @override
-  Set<DropOperation> get allowedOperations => {DropOperation.copy};
-
-  @override
-  List<DropItem> get items => const [];
-
-  @override
-  Listenable get onDisposed => _disposed;
 }
 
 class _FakeFilePicker extends FilePicker {

@@ -9,6 +9,22 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get cardAction_singleScope => '仅此项';
+
+  @override
+  String cardDrag_preparingCount(int count) {
+    return '正在准备 $count 项拖出资源…';
+  }
+
+  @override
+  String get cardDrop_unsupported => '此位置不支持这组资源或数量，请使用对应的资源导入入口。';
+
+  @override
+  String cardAction_batchFailed(int failed, int total) {
+    return '$total 项中有 $failed 项失败';
+  }
+
+  @override
   String get generation_enhancementFailed => '增强失败，已保留原图';
 
   @override
@@ -14561,6 +14577,22 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, using the Han script (`zh_Hant`).
 class AppLocalizationsZhHant extends AppLocalizationsZh {
   AppLocalizationsZhHant() : super('zh_Hant');
+
+  @override
+  String get cardAction_singleScope => '僅此項';
+
+  @override
+  String cardDrag_preparingCount(int count) {
+    return '正在準備 $count 項拖出資源…';
+  }
+
+  @override
+  String get cardDrop_unsupported => '此位置不支援這組資源或數量，請使用對應的資源匯入入口。';
+
+  @override
+  String cardAction_batchFailed(int failed, int total) {
+    return '$total 項中有 $failed 項失敗';
+  }
 
   @override
   String get generation_enhancementFailed => '增強失敗，已保留原圖';

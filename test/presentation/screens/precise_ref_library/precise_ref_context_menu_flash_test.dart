@@ -1,3 +1,4 @@
+import 'package:nai_launcher/presentation/widgets/common/pro_context_menu.dart';
 // 回归：精准参考库右键菜单必须在抬起后打开且不扰动指针设备检测器；
 // 设备类型翻转重建卡片时，缩略图内存缓存保证首帧不闪占位符。
 import 'dart:typed_data';
@@ -120,13 +121,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     // 按住期间不得弹菜单：此时 push 会触发合成 touch 取消事件
-    expect(find.byType(PopupMenuItem<bool>), findsNothing);
+    expect(find.byType(ProContextMenu), findsNothing);
 
     await gesture.up();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.byType(PopupMenuItem<bool>), findsOneWidget);
+    expect(find.byType(ProContextMenu), findsOneWidget);
     expect(kindChanges, isEmpty, reason: '弹菜单扰动了全局指针设备检测器');
     expect(storage.thumbnailFetches.length, fetchesBefore);
 

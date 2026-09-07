@@ -1,3 +1,4 @@
+import '../../../selection/card_selection_scope.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -19,21 +20,16 @@ import '../../../../data/models/vibe/vibe_library_entry.dart';
 import '../../../../data/models/vibe/vibe_reference.dart';
 import '../../../../data/services/vibe_library_storage_service.dart';
 import '../../../providers/generation/generation_params_notifier.dart';
-import '../../../providers/selection_mode_provider.dart';
 import '../../../providers/vibe_library_category_provider.dart';
 import '../../../providers/vibe_library_provider.dart';
 import '../../../providers/vibe_library_selection_provider.dart';
 import '../../../router/app_routes.dart';
-import '../../../agent_chat/providers/agent_chat_notifier.dart';
 import '../../../widgets/common/app_toast.dart';
 import '../../../widgets/common/frame_staggered_builder.dart';
-import '../../../widgets/common/pro_context_menu.dart';
 import '../../../widgets/common/themed_confirm_dialog.dart';
-import '../../../widgets/common/library_classification_drag.dart';
 import '../../../agent_chat/widgets/agent_resource_drop_region.dart';
 import 'vibe_card.dart';
 import 'category/vibe_category_destination_panel.dart';
-import '../../../widgets/common/context_menu_anchor.dart';
 import 'vibe_detail_viewer.dart';
 import 'vibe_export_dialog.dart';
 import 'vibe_library_empty_view.dart';
@@ -91,7 +87,14 @@ class _VibeLibraryContentViewState
     final categoryLabels = buildVibeCategoryLabels(categories);
 
     // 使用 3D 卡片视图模式
-    return _build3DCardView(state, selectionState, categoryLabels);
+    return CardSelectionScope(
+      selection: selectionState,
+      commands: ref.read(vibeLibrarySelectionNotifierProvider.notifier),
+      orderedIds: state.currentEntries.map((e) => e.id).toList(),
+      child: CardSelectionShortcuts(
+        child: _build3DCardView(state, selectionState, categoryLabels),
+      ),
+    );
   }
 
   /// 构建 3D 卡片视图
@@ -164,7 +167,6 @@ class _VibeLibraryContentViewState
             ),
           ),
           child: AgentResourceDragSource(
-            enableAddToAgentMenu: false,
             enableAddToAgentAction: !selectionState.isActive,
             reference: AgentChatResourceReference(
               kind: AgentChatResourceKind.vibeLibraryEntry,
@@ -172,54 +174,47 @@ class _VibeLibraryContentViewState
               resourceId: entry.id,
               display: {'name': entry.displayName},
             ),
-            child: LibraryClassificationDragSource<VibeLibraryEntry>(
-              data: entry,
-              label: entry.displayName,
-              enabled: !selectionState.isActive,
-              child: VibeCard(
-                entry: entry,
-                width: widget.itemWidth,
-                height: computeVibeCardHeight(widget.itemWidth),
-                isSelected: isSelected,
-                showFavoriteIndicator: true,
-                categoryLabel: categoryLabels[entry.categoryId],
-                onTap: () {
-                  if (selectionState.isActive) {
-                    ref
-                        .read(vibeLibrarySelectionNotifierProvider.notifier)
-                        .toggle(entry.id);
-                  } else {
-                    _showVibeDetail(context, entry);
-                  }
-                },
-                onLongPress: () {
-                  if (!selectionState.isActive) {
-                    ref
-                        .read(vibeLibrarySelectionNotifierProvider.notifier)
-                        .enterAndSelect(entry.id);
-                  }
-                },
-                onSecondaryTapUp: (details) {
-                  _showContextMenu(context, entry, details.globalPosition);
-                },
-                onFavoriteToggle: () {
+            child: VibeCard(
+              entry: entry,
+              width: widget.itemWidth,
+              height: computeVibeCardHeight(widget.itemWidth),
+              isSelected: isSelected,
+              selectionMode: selectionState.isActive,
+              showFavoriteIndicator: true,
+              categoryLabel: categoryLabels[entry.categoryId],
+              onTap: () {
+                if (selectionState.isActive) {
                   ref
-                      .read(vibeLibraryNotifierProvider.notifier)
-                      .toggleFavorite(entry.id);
-                },
-                onSendToGeneration: () async {
-                  final physicalKeys =
-                      HardwareKeyboard.instance.physicalKeysPressed;
-                  final isShiftPressed =
-                      physicalKeys.contains(PhysicalKeyboardKey.shiftLeft) ||
-                      physicalKeys.contains(PhysicalKeyboardKey.shiftRight);
-                  await _sendEntryToGeneration(context, entry, isShiftPressed);
-                },
-                onExport: () => unawaited(_exportSingleEntry(context, entry)),
-                onEdit: () => _showVibeDetail(context, entry),
-                onClassify: () => _classifyEntry(entry),
-                onDelete: () => _deleteSingleEntry(context, entry),
-              ),
+                      .read(vibeLibrarySelectionNotifierProvider.notifier)
+                      .toggle(entry.id);
+                } else {
+                  _showVibeDetail(context, entry);
+                }
+              },
+              onLongPress: () {
+                if (!selectionState.isActive) {
+                  ref
+                      .read(vibeLibrarySelectionNotifierProvider.notifier)
+                      .enterAndSelect(entry.id);
+                }
+              },
+              onFavoriteToggle: () {
+                ref
+                    .read(vibeLibraryNotifierProvider.notifier)
+                    .toggleFavorite(entry.id);
+              },
+              onSendToGeneration: () async {
+                final physicalKeys =
+                    HardwareKeyboard.instance.physicalKeysPressed;
+                final isShiftPressed =
+                    physicalKeys.contains(PhysicalKeyboardKey.shiftLeft) ||
+                    physicalKeys.contains(PhysicalKeyboardKey.shiftRight);
+                await _sendEntryToGeneration(context, entry, isShiftPressed);
+              },
+              onExport: () => _exportSingleEntry(context, entry),
+              onEdit: () => _showVibeDetail(context, entry),
+              onClassify: () => _classifyEntry(entry),
+              onDelete: () => _deleteSingleEntry(context, entry),
             ),
           ),
         );
@@ -306,99 +301,6 @@ class _VibeLibraryContentViewState
       resolved = true;
     } finally {
       span.finish(details: {'resolved': resolved});
-    }
-  }
-
-  /// 显示上下文菜单
-  void _showContextMenu(
-    BuildContext context,
-    VibeLibraryEntry entry,
-    Offset position,
-  ) {
-    final l10n = context.l10n;
-    final items = <ProMenuItem>[
-      ProMenuItem(
-        id: 'add_to_agent',
-        label: l10n.agentChat_addResource,
-        icon: Icons.auto_awesome_outlined,
-        onTap: () => unawaited(_addEntryToAgent(context, entry)),
-      ),
-      ProMenuItem(
-        id: 'send_to_generation',
-        label: l10n.vibeLibrary_sendToGeneration,
-        icon: Icons.send,
-        onTap: () async => _sendEntryToGeneration(context, entry),
-      ),
-      ProMenuItem(
-        id: 'export',
-        label: l10n.vibeLibrary_export,
-        icon: Icons.download,
-        onTap: () => unawaited(_exportSingleEntry(context, entry)),
-      ),
-      ProMenuItem(
-        id: 'edit',
-        label: l10n.vibeLibrary_edit,
-        icon: Icons.edit,
-        onTap: () => _showVibeDetail(context, entry),
-      ),
-      const ProMenuItem.divider(),
-      ProMenuItem(
-        id: 'toggle_favorite',
-        label: entry.isFavorite
-            ? l10n.vibeLibrary_removeFromFavorites
-            : l10n.vibeLibrary_addToFavorites,
-        icon: entry.isFavorite ? Icons.favorite : Icons.favorite_border,
-        onTap: () {
-          ref
-              .read(vibeLibraryNotifierProvider.notifier)
-              .toggleFavorite(entry.id);
-        },
-      ),
-      ProMenuItem(
-        id: 'delete',
-        label: l10n.vibeLibrary_delete,
-        icon: Icons.delete_outline,
-        isDanger: true,
-        onTap: () => _deleteSingleEntry(context, entry),
-      ),
-    ];
-
-    Navigator.of(context).push(
-      _ContextMenuRoute(
-        position: position,
-        items: items,
-        onSelect: (item) {
-          // Item onTap is already called
-        },
-      ),
-    );
-  }
-
-  Future<void> _addEntryToAgent(
-    BuildContext context,
-    VibeLibraryEntry entry,
-  ) async {
-    try {
-      await ref
-          .read(agentChatNotifierProvider.notifier)
-          .addPendingResource(
-            AgentChatResourceReference(
-              kind: AgentChatResourceKind.vibeLibraryEntry,
-              source: 'vibe_library',
-              resourceId: entry.id,
-              display: {'name': entry.displayName},
-            ),
-          );
-      if (context.mounted) {
-        AppToast.success(context, context.l10n.agentChat_resourceAdded);
-      }
-    } on Object catch (error) {
-      if (context.mounted) {
-        AppToast.error(
-          context,
-          context.l10n.agentChat_addResourceFailed('$error'),
-        );
-      }
     }
   }
 
@@ -958,86 +860,3 @@ List<VibeReference> buildBundleVibesForGeneration(
 }
 
 /// 自定义上下文菜单路由
-class _ContextMenuRoute extends PopupRoute {
-  final Offset position;
-  final List<ProMenuItem> items;
-  final void Function(ProMenuItem) onSelect;
-
-  _ContextMenuRoute({
-    required this.position,
-    required this.items,
-    required this.onSelect,
-  });
-
-  @override
-  Color? get barrierColor => null;
-
-  @override
-  bool get barrierDismissible => true;
-
-  @override
-  String? get barrierLabel => null;
-
-  @override
-  Widget buildPage(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-  ) {
-    return MediaQuery.removePadding(
-      context: context,
-      removeTop: true,
-      removeLeft: true,
-      removeRight: true,
-      removeBottom: true,
-      child: Builder(
-        builder: (context) {
-          // position 是窗口全局坐标；路由页面铺在最近 Overlay 上，
-          // 需换算到 overlay 局部坐标并按 overlay 尺寸收拢
-          final overlaySize = contextMenuOverlaySize(context);
-          final local = contextMenuLocalPosition(context, position);
-          const menuWidth = 180.0;
-          final menuHeight =
-              items.where((i) => !i.isDivider).length * 36.0 +
-              items.where((i) => i.isDivider).length * 1.0;
-
-          double left = local.dx;
-          double top = local.dy;
-
-          // 调整水平位置，如果菜单超出 overlay
-          if (left + menuWidth > overlaySize.width) {
-            left = overlaySize.width - menuWidth - 16;
-          }
-
-          // 调整垂直位置，如果菜单超出 overlay
-          if (top + menuHeight > overlaySize.height) {
-            top = overlaySize.height - menuHeight - 16;
-          }
-
-          return GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () => Navigator.of(context).pop(),
-            child: Stack(
-              children: [
-                ProContextMenu(
-                  position: Offset(left, top),
-                  items: items,
-                  onSelect: (item) {
-                    onSelect(item);
-                    Navigator.of(context).pop();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      item.onTap?.call();
-                    });
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  @override
-  Duration get transitionDuration => Duration.zero;
-}

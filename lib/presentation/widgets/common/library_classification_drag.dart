@@ -1,7 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
-import '../../adaptive/interaction_policy.dart';
+import '../../../core/agent/resources/agent_chat_resource_reference.dart';
+import '../../../core/agent/resources/agent_chat_resource_drag_format.dart';
+import '../../../core/utils/app_logger.dart';
+import '../../../core/utils/localization_extension.dart';
+import '../../utils/card_drag_format.dart';
+import 'app_toast.dart';
+import 'image_card_action.dart';
+
+export '../../../core/agent/resources/agent_chat_resource_reference.dart'
+    show AgentChatResourceKind;
 
 /// Exposes the active drop state to the classification row that owns the
 /// visual surface. Keeping the feedback on that row avoids stacking a second
@@ -30,104 +42,103 @@ class LibraryClassificationDropTargetStatus extends InheritedWidget {
   }
 }
 
-/// Shared in-app drag behavior for assigning library entries to sidebar
-/// destinations. Touch layouts use explicit card actions instead.
-class LibraryClassificationDragSource<T extends Object>
-    extends StatelessWidget {
-  const LibraryClassificationDragSource({
-    super.key,
-    required this.data,
-    required this.label,
-    required this.child,
-    this.icon = Icons.drive_file_move_outline,
-    this.enabled = true,
-    this.onDragStarted,
-    this.onDragEnded,
-  });
-
-  final T data;
-  final String label;
-  final Widget child;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback? onDragStarted;
-  final VoidCallback? onDragEnded;
-
-  @override
-  Widget build(BuildContext context) {
-    final dragEnabled = enabled && context.interactionPolicy.usesAnchoredMenus;
-    final theme = Theme.of(context);
-    return Draggable<T>(
-      data: data,
-      maxSimultaneousDrags: dragEnabled ? null : 0,
-      onDragStarted: () {
-        HapticFeedback.mediumImpact();
-        onDragStarted?.call();
-      },
-      onDragEnd: (_) => onDragEnded?.call(),
-      feedback: dragEnabled
-          ? Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(8),
-              color: theme.colorScheme.surfaceContainerHigh,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 18, color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(label, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          : const SizedBox.shrink(),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
-      child: child,
-    );
-  }
-}
-
-/// Shared visual and haptic response for Favorites and category/type targets.
-class LibraryClassificationDropTarget<T extends Object>
-    extends StatelessWidget {
+/// Resolves the entire set before changing any classification.
+class LibraryClassificationDropTarget<T extends Object> extends StatefulWidget {
   const LibraryClassificationDropTarget({
     super.key,
-    required this.child,
+    required this.kind,
+    required this.resolve,
     required this.onAccept,
-    this.canAccept,
+    required this.child,
+    this.needsChange,
     this.enabled = true,
   });
 
+  final AgentChatResourceKind kind;
+  final FutureOr<T?> Function(String id) resolve;
+  final FutureOr<void> Function(T) onAccept;
+  final bool Function(T)? needsChange;
   final Widget child;
-  final ValueChanged<T> onAccept;
-  final bool Function(T data)? canAccept;
   final bool enabled;
 
   @override
-  Widget build(BuildContext context) {
-    if (!enabled) return child;
-    return DragTarget<T>(
-      onWillAcceptWithDetails: (details) =>
-          canAccept?.call(details.data) ?? true,
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        onAccept(details.data);
-      },
-      builder: (context, candidates, rejected) =>
-          LibraryClassificationDropTargetStatus(
-            isAccepting: candidates.isNotEmpty,
-            child: child,
-          ),
-    );
+  State<LibraryClassificationDropTarget<T>> createState() =>
+      _LibraryClassificationDropTargetState<T>();
+}
+
+class _LibraryClassificationDropTargetState<T extends Object>
+    extends State<LibraryClassificationDropTarget<T>> {
+  bool _accepting = false;
+
+  bool _canRead(Iterable<DropItem> items) =>
+      widget.enabled &&
+      items.isNotEmpty &&
+      items.every(
+        (item) => decodeLocalAgentResource(item.localData)?.kind == widget.kind,
+      );
+
+  void _setAccepting(bool value) {
+    if (mounted && value != _accepting) setState(() => _accepting = value);
   }
+
+  @override
+  Widget build(BuildContext context) => DropRegion(
+    formats: [cardDragFormat, agentChatResourceDragFormat],
+    onDropOver: (event) {
+      final accepts = _canRead(event.session.items);
+      _setAccepting(accepts);
+      return accepts ? DropOperation.copy : DropOperation.none;
+    },
+    onDropLeave: (_) => _setAccepting(false),
+    onPerformDrop: (event) async {
+      _setAccepting(false);
+      final overlay = Overlay.maybeOf(context, rootOverlay: true);
+      final errorLabel = context.l10n.common_error;
+      final resolve = widget.resolve;
+      final needsChange = widget.needsChange;
+      final onAccept = widget.onAccept;
+      try {
+        if (!_canRead(event.session.items)) {
+          throw StateError('Unsupported classification resource set');
+        }
+        final targets = <T>[];
+        for (final item in event.session.items) {
+          final reference = decodeLocalAgentResource(item.localData)!;
+          final target = await resolve(reference.resourceId);
+          if (target == null) {
+            throw StateError(
+              'Classification target is unavailable: ${reference.resourceId}',
+            );
+          }
+          targets.add(target);
+        }
+        HapticFeedback.heavyImpact();
+        final result = await ImageCardBatchResult.execute<T>(targets, (
+          target,
+        ) async {
+          if (needsChange?.call(target) ?? true) await onAccept(target);
+        });
+        if (result.failures.isNotEmpty) {
+          for (final failure in result.failures.values) {
+            AppLogger.e(
+              'Classification drop failed',
+              failure.error,
+              failure.stackTrace,
+              'CardDrag',
+            );
+          }
+          throw StateError(
+            '${result.failures.length}/${targets.length}: ${result.failures.values.map((failure) => failure.error).join('; ')}',
+          );
+        }
+      } catch (error, stack) {
+        AppLogger.e('Classification drop failed', error, stack, 'CardDrag');
+        AppToast.errorOnOverlay(overlay, '$errorLabel: $error');
+      }
+    },
+    child: LibraryClassificationDropTargetStatus(
+      isAccepting: _accepting,
+      child: widget.child,
+    ),
+  );
 }

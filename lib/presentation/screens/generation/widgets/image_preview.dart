@@ -1,3 +1,8 @@
+import '../../../providers/generation/image_card_selection_provider.dart';
+import '../../../selection/card_selection_scope.dart';
+import '../../../widgets/common/image_card_batch_scope.dart';
+import '../../../widgets/bulk_action_bar.dart';
+import '../services/generation_image_batch_actions.dart';
 import 'package:nai_launcher/data/models/image/image_postprocess_phase.dart';
 import 'dart:async';
 import 'dart:io';
@@ -151,27 +156,84 @@ class _ImagePreviewWidgetState extends ConsumerState<ImagePreviewWidget> {
   Widget build(BuildContext context) {
     final state = ref.watch(imageGenerationNotifierProvider);
     final theme = Theme.of(context);
+    final selection = ref.watch(generationImageCardSelectionProvider);
+    final selectionNotifier = ref.read(
+      generationImageCardSelectionProvider.notifier,
+    );
+    final presented = state.displayImages
+        .where((image) => image.canBulkSelect)
+        .map((image) => image.id)
+        .toList();
+    final selectedImages = state.selectableMergedImages
+        .where((image) => selection.isSelected(image.id))
+        .toList();
 
     // 使用 GestureDetector 吸收整个区域的点击事件，避免 Windows 系统提示音
-    return PreviewNavShortcuts(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (ref.read(historyClickBehaviorNotifierProvider) ==
-              HistoryClickBehavior.selectPreview) {
-            ref.read(generationPreviewFocusNodeProvider).requestFocus();
-          }
-        },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = WindowSizeClass.fromWidth(
-              constraints.maxWidth,
-            ).isCompact;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, compact ? 4 : 16),
-              child: Center(child: _buildContent(context, ref, state, theme)),
-            );
-          },
+    return ImageCardBatchScope(
+      runner: selectionNotifier.actionRunner,
+      targetIds: selection.selectedIds,
+      actions: GenerationImageBatchActions(
+        context: context,
+        images: selectedImages,
+        gallery: ref.read(localGalleryNotifierProvider.notifier),
+        selection: selectionNotifier,
+      ).build(),
+      child: CardSelectionScope(
+        selection: selection,
+        commands: selectionNotifier,
+        orderedIds: presented,
+        child: CardSelectionShortcuts(
+          child: Column(
+            children: [
+              Expanded(
+                child: PreviewNavShortcuts(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (ref.read(historyClickBehaviorNotifierProvider) ==
+                          HistoryClickBehavior.selectPreview) {
+                        ref
+                            .read(generationPreviewFocusNodeProvider)
+                            .requestFocus();
+                      }
+                    },
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = WindowSizeClass.fromWidth(
+                          constraints.maxWidth,
+                        ).isCompact;
+                        return Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            16,
+                            16,
+                            compact ? 4 : 16,
+                          ),
+                          child: Center(
+                            child: _buildContent(context, ref, state, theme),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              if (selection.isActive)
+                Builder(
+                  builder: (context) => BulkActionBar(
+                    selectedCount: selection.selectedCount,
+                    isAllSelected:
+                        presented.isNotEmpty &&
+                        presented.every(selection.isSelected),
+                    onExit: selectionNotifier.exit,
+                    onSelectAll: () => presented.every(selection.isSelected)
+                        ? selectionNotifier.deselectAll(presented)
+                        : selectionNotifier.selectAll(presented),
+                    actions: imageCardBulkItems(context),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -690,7 +752,28 @@ class _ImagePreviewWidgetState extends ConsumerState<ImagePreviewWidget> {
           : null,
       hoverEffectsEnabled: !comparisonEnabled,
       enableHoverScale: !comparisonEnabled,
-      enableSelection: false,
+      enableSelection: image.canBulkSelect && !comparisonEnabled,
+      showSelectionOnHover: false,
+      selectionMode: ref.watch(generationImageCardSelectionProvider).isActive,
+      isSelected: ref
+          .watch(generationImageCardSelectionProvider)
+          .isSelected(image.id),
+      allowRepeatedModifierTaps: true,
+      onSelectionChanged: image.canBulkSelect
+          ? (selected) {
+              final selection = ref.read(
+                generationImageCardSelectionProvider.notifier,
+              );
+              selected
+                  ? selection.enterAndSelect(image.id)
+                  : selection.deselect(image.id);
+            }
+          : null,
+      onLongPress: image.canBulkSelect
+          ? () => ref
+                .read(generationImageCardSelectionProvider.notifier)
+                .enterAndSelect(image.id)
+          : null,
       enableSaveAction: image.canSave,
       enableCopyAction: image.canSave,
       statusBadgeLabel: isFailedSnapshot

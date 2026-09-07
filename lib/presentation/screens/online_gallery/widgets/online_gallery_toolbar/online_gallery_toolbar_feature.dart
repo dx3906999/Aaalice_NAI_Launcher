@@ -1,3 +1,4 @@
+import '../../../../widgets/common/image_card_batch_scope.dart';
 import 'package:nai_launcher/presentation/widgets/common/horizontal_action_strip.dart';
 import 'dart:async';
 
@@ -19,7 +20,6 @@ import '../../../../providers/selection_mode_provider.dart';
 import '../../../../services/gallery_prompt_projection_service.dart';
 import '../../../../widgets/bulk_action_bar.dart';
 import '../../../../widgets/gallery/gallery_sidebar.dart';
-import '../../../online_gallery/online_gallery_screen_commands.dart';
 import '../../../online_gallery/online_gallery_screen_controller.dart';
 import 'online_gallery_search_reveal.dart';
 import 'online_gallery_toolbar.dart';
@@ -79,7 +79,6 @@ class _OnlineGalleryToolbarPresenter {
   OnlineGalleryNotifier get _galleryNotifier => _bindings.commands.gallery;
   OnlineGallerySelectionNotifier get _selectionNotifier =>
       _bindings.commands.selection;
-  OnlineGalleryScreenCommands get _actions => _bindings.commands.actions;
 
   Widget build() => _buildToolbar(
     Theme.of(context),
@@ -113,11 +112,6 @@ class _OnlineGalleryToolbarPresenter {
           selectablePostIds.every(
             (id) => selectionState.selectedIds.contains(id),
           );
-      final canDownloadSelected = state.posts.any(
-        (post) =>
-            selectionState.selectedIds.contains(post.stableKey) &&
-            post.hasValidPreview,
-      );
 
       return BulkActionBar(
         selectedCount: selectionState.selectedIds.length,
@@ -125,32 +119,12 @@ class _OnlineGalleryToolbarPresenter {
         onExit: () => _selectionNotifier.exit(),
         onSelectAll: () {
           if (isAllSelected) {
-            _selectionNotifier.clearSelection();
+            _selectionNotifier.deselectAll(selectablePostIds);
           } else {
             _selectionNotifier.selectAll(selectablePostIds);
           }
         },
-        actions: [
-          BulkActionItem(
-            icon: Icons.playlist_add,
-            label: context.l10n.onlineGallery_addToQueue,
-            onPressed: _actions.addSelectedToQueue,
-            color: theme.colorScheme.primary,
-          ),
-          if (_canWriteFavorites(state))
-            BulkActionItem(
-              icon: Icons.favorite_border,
-              label: context.l10n.onlineGallery_bulkFavorite,
-              onPressed: _actions.favoriteSelected,
-              color: theme.colorScheme.secondary,
-            ),
-          BulkActionItem(
-            icon: Icons.download,
-            label: context.l10n.onlineGallery_bulkDownload,
-            onPressed: canDownloadSelected ? _actions.downloadSelected : null,
-            color: theme.colorScheme.tertiary,
-          ),
-        ],
+        actions: imageCardBulkItems(context),
       );
     }
 
@@ -921,7 +895,4 @@ class _OnlineGalleryToolbarPresenter {
 
   GallerySourceId _activeSource(OnlineGalleryState state) =>
       _authControls.activeSource;
-
-  bool _canWriteFavorites(OnlineGalleryState state) =>
-      _authControls.canWriteFavorites;
 }

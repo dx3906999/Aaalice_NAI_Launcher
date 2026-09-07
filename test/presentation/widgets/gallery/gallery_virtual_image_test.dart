@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nai_launcher/core/utils/image_share_sanitizer.dart';
-import 'package:nai_launcher/presentation/widgets/gallery/gallery_virtual_image.dart';
+import 'package:nai_launcher/presentation/widgets/common/card_virtual_file.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:super_native_extensions/raw_clipboard.dart' as raw;
 
@@ -26,7 +26,12 @@ void main() {
     () async {
       final pending = Completer<SanitizedShareImage>();
       final item = _Item();
-      addGalleryVirtualImage(item, pending.future);
+      addCardVirtualFile(
+        item,
+        format: Formats.png,
+        prepare: () async => (await pending.future).bytes,
+        reportFailure: (_, __) {},
+      );
       final representations = (await item.data.single).representations;
       final virtual =
           representations.single as raw.DataRepresentationVirtualFile;
@@ -59,7 +64,12 @@ void main() {
     () async {
       final pending = Completer<SanitizedShareImage>();
       final item = _Item();
-      addGalleryVirtualImage(item, pending.future);
+      addCardVirtualFile(
+        item,
+        format: Formats.png,
+        prepare: () async => (await pending.future).bytes,
+        reportFailure: (_, __) {},
+      );
       final virtual =
           (await item.data.single).representations.single
               as raw.DataRepresentationVirtualFile;
@@ -88,7 +98,12 @@ void main() {
     () async {
       final pending = Completer<SanitizedShareImage>();
       final item = _Item();
-      addGalleryVirtualImage(item, pending.future);
+      addCardVirtualFile(
+        item,
+        format: Formats.png,
+        prepare: () async => (await pending.future).bytes,
+        reportFailure: (_, __) {},
+      );
       final virtual =
           (await item.data.single).representations.single
               as raw.DataRepresentationVirtualFile;

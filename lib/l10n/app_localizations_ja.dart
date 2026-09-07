@@ -9,6 +9,23 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get cardAction_singleScope => 'この項目のみ';
+
+  @override
+  String cardDrag_preparingCount(int count) {
+    return '$count 件のドラッグ用リソースを準備中…';
+  }
+
+  @override
+  String get cardDrop_unsupported =>
+      'この場所では、このリソースの種類または件数を扱えません。対応するインポート先を使用してください。';
+
+  @override
+  String cardAction_batchFailed(int failed, int total) {
+    return '$total 件中 $failed 件が失敗しました';
+  }
+
+  @override
   String get generation_enhancementFailed => '補正に失敗しました。元画像は保持されています';
 
   @override

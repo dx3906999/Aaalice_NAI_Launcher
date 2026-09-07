@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nai_launcher/core/agent/resources/agent_chat_resource_reference.dart';
-import 'package:nai_launcher/core/agent/resources/agent_chat_resource_reference_codec.dart';
 import 'package:nai_launcher/l10n/app_localizations.dart';
+import 'package:nai_launcher/presentation/providers/online_gallery_provider.dart';
 import 'package:nai_launcher/presentation/agent_chat/widgets/agent_resource_drop_region.dart';
 import 'package:nai_launcher/presentation/widgets/common/image_card_actions.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
@@ -24,6 +25,8 @@ void main() {
   testWidgets('drag source local data is platform-channel serializable', (
     tester,
   ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     await tester.pumpWidget(_app());
     final dragWidget = tester.widget<DragItemWidget>(
       find.byType(DragItemWidget),
@@ -31,22 +34,22 @@ void main() {
     final session = _FakeDragSession();
     addTearDown(session.dispose);
 
-    final item = await tester.runAsync(() async {
-      final provided = dragWidget.dragItemProvider(
-        DragItemRequest(location: Offset.zero, session: session),
-      );
-      return Future<DragItem?>.value(provided);
-    });
+    final item = await dragWidget.dragItemProvider(
+      DragItemRequest(location: Offset.zero, session: session),
+    );
 
     expect(item, isNotNull);
-    expect(item!.localData, isA<String>());
-    final decoded = AgentChatResourceReferenceCodec.decodeJson(
-      item.localData! as String,
+    expect(item!.localData, isA<Map>());
+    expect(
+      () => const StandardMessageCodec().encodeMessage(item.localData),
+      returnsNormally,
     );
+    final decoded = decodeLocalAgentResource(item.localData)!;
     expect(decoded.kind, AgentChatResourceKind.onlineGalleryMedia);
     expect(decoded.source, 'danbooru');
     expect(decoded.resourceId, '1');
     expect(decoded.mediaId, 'cover-1');
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('drag source exposes the card Agent action scope', (
@@ -119,7 +122,6 @@ void main() {
     var childMenuCalls = 0;
     await tester.pumpWidget(
       _app(
-        enableAddToAgentMenu: false,
         child: GestureDetector(
           key: const ValueKey('child-context-menu'),
           behavior: HitTestBehavior.opaque,
@@ -146,6 +148,7 @@ void main() {
 
 Widget _manySourcesApp() {
   return ProviderScope(
+    overrides: [onlineGalleryNotifierProvider.overrideWith(_TestGallery.new)],
     child: MaterialApp(
       home: Scaffold(
         body: GridView.count(
@@ -170,10 +173,10 @@ Widget _manySourcesApp() {
 Widget _app({
   double width = 100,
   Widget? child,
-  bool enableAddToAgentMenu = true,
   bool enableAddToAgentAction = true,
 }) {
   return ProviderScope(
+    overrides: [onlineGalleryNotifierProvider.overrideWith(_TestGallery.new)],
     child: MaterialApp(
       locale: const Locale('en'),
       supportedLocales: AppLocalizations.supportedLocales,
@@ -185,7 +188,6 @@ Widget _app({
             width: width,
             height: 100,
             child: AgentResourceDragSource(
-              enableAddToAgentMenu: enableAddToAgentMenu,
               enableAddToAgentAction: enableAddToAgentAction,
               reference: AgentChatResourceReference(
                 kind: AgentChatResourceKind.onlineGalleryMedia,
@@ -251,4 +253,9 @@ class _LifecycleProbeState extends State<_LifecycleProbe> {
 
   @override
   Widget build(BuildContext context) => const ColoredBox(color: Colors.blue);
+}
+
+class _TestGallery extends OnlineGalleryNotifier {
+  @override
+  OnlineGalleryState build() => const OnlineGalleryState();
 }

@@ -26,6 +26,7 @@ import '../../providers/local_gallery_provider.dart';
 import '../../providers/selection_mode_provider.dart';
 import '../../utils/asset_protection_guard.dart';
 import '../../widgets/common/app_toast.dart';
+import '../../widgets/common/image_card_action.dart';
 import '../../widgets/common/themed_confirm_dialog.dart';
 import '../../widgets/common/themed_input_dialog.dart';
 import '../../widgets/gallery_filter_panel.dart';
@@ -298,7 +299,7 @@ class LocalGalleryScreenController extends ChangeNotifier {
       onCategoryMoveToSlot: (id, targetId, slot) => _ref
           .read(galleryCategoryNotifierProvider.notifier)
           .moveCategoryToSlot(id, targetId, slot),
-      onImageDrop: handleImageDrop,
+      onImagesDrop: handleImagesDrop,
       onSyncWithFileSystem: handleSyncWithFileSystem,
       onCreateAlbum: (parentId) => createAlbum(parentId),
       onAlbumSelected: (id) => unawaited(handleAlbumSelected(id)),
@@ -313,8 +314,8 @@ class LocalGalleryScreenController extends ChangeNotifier {
       onAlbumMoveToSlot: (id, targetId, slot) => _ref
           .read(galleryAlbumNotifierProvider.notifier)
           .moveAlbumToSlot(id, targetId, slot),
-      onImageDropToAlbum: handleImageDropToAlbum,
-      onImageFavoriteDrop: handleImageFavoriteDrop,
+      onImagesDropToAlbum: handleImagesDropToAlbum,
+      onImagesFavoriteDrop: handleImagesFavoriteDrop,
     );
   }
 
@@ -354,10 +355,18 @@ class LocalGalleryScreenController extends ChangeNotifier {
     await _ref.read(galleryAlbumNotifierProvider.notifier).deleteAlbum(albumId);
   }
 
-  Future<void> handleImageDropToAlbum(String imagePath, String albumId) async {
-    final added = await _ref
-        .read(galleryAlbumNotifierProvider.notifier)
-        .addImagesByPaths(albumId, [imagePath]);
+  Future<void> handleImagesDropToAlbum(
+    List<String> imagePaths,
+    String albumId,
+  ) async {
+    final albums = _ref.read(galleryAlbumNotifierProvider.notifier);
+    final owner = _ref.read(localGalleryNotifierProvider.notifier);
+    final service = await owner.getService();
+    final images = await service.getRecordsByPaths(imagePaths);
+    if (images.length != imagePaths.toSet().length) {
+      throw StateError('Some dropped gallery images are unavailable');
+    }
+    final added = await albums.addImagesByPaths(albumId, imagePaths);
     if (!_mounted()) return;
     AppToast.info(
       _context(),
@@ -461,42 +470,23 @@ class LocalGalleryScreenController extends ChangeNotifier {
     }
   }
 
-  Future<void> handleImageDrop(String imagePath, String? categoryId) async {
-    final context = _context();
-    final protected = await AssetProtectionGuard.confirmDangerousAction(
-      context: context,
-      ref: _ref,
-      title: context.l10n.localGallery_confirmMoveImageTitle,
-      content: context.l10n.localGallery_confirmMoveImageContent,
-      confirmText: context.l10n.localGallery_confirmMove,
-      icon: Icons.drive_file_move_outline,
-    );
-    if (!protected || !_mounted()) return;
-    final newPath = await _ref
-        .read(galleryCategoryNotifierProvider.notifier)
-        .moveImageToCategory(imagePath, categoryId);
-    if (newPath == null) return;
-    await _ref.read(localGalleryNotifierProvider.notifier).refresh(scan: false);
-    // 物理移动改变了成员文件路径，立即刷新 sidecar 保持跨设备引用有效
-    unawaited(
-      _ref.read(galleryAlbumNotifierProvider.notifier).exportSidecarNow(),
-    );
-    if (_mounted()) {
-      AppToast.success(
-        _context(),
-        _context().l10n.localGallery_imageMovedToCategory,
-      );
-    }
-  }
+  Future<void> handleImagesDrop(List<String> imagePaths, String? categoryId) =>
+      _actions.moveImagesToCategory(imagePaths, categoryId);
 
-  Future<void> handleImageFavoriteDrop(String imagePath) async {
-    final images = _ref.read(localGalleryNotifierProvider).currentImages;
-    final index = images.indexWhere((item) => item.path == imagePath);
-    final image = index < 0 ? null : images[index];
-    if (image == null || image.isFavorite) return;
-    await _ref
-        .read(localGalleryNotifierProvider.notifier)
-        .toggleFavorite(imagePath);
+  Future<void> handleImagesFavoriteDrop(List<String> imagePaths) async {
+    final owner = _ref.read(localGalleryNotifierProvider.notifier);
+    final service = await owner.getService();
+    final images = await service.getRecordsByPaths(imagePaths);
+    if (images.length != imagePaths.toSet().length) {
+      throw StateError('Some dropped gallery images are unavailable');
+    }
+    final result = await ImageCardBatchResult.execute(images, (image) async {
+      if (image.isFavorite) return;
+      if (!await owner.toggleFavorite(image.path)) {
+        throw StateError('Unable to favorite image: ${image.path}');
+      }
+    });
+    result.requireComplete();
   }
 
   Future<void> handleSyncWithFileSystem() async {

@@ -325,7 +325,7 @@ void main() {
                   onUpdateInfoExtracted: (_, __) {},
                   onUpdateEnabled: (_, __) {},
                   onClearAll: () {},
-                  onImportDroppedFile: (_, __) async => 0,
+                  onImportDroppedResources: (_) async => 0,
                   recentEntries: const [],
                   isRecentCollapsed: false,
                   onToggleRecentCollapsed: () {},
@@ -339,7 +339,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Add from File'), findsOneWidget);
-      expect(find.byType(DropRegion), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: find.text('Add from File'),
+          matching: find.byType(DropRegion),
+        ),
+        findsWidgets,
+      );
     });
   });
 

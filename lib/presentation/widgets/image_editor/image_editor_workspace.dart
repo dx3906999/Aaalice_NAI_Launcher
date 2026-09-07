@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../core/platform/platform_capabilities.dart';
@@ -19,9 +18,7 @@ import '../../../core/utils/nai_resolution_adapter.dart';
 import '../../../data/services/efficient_vit_sam_service.dart';
 import '../../adaptive/adaptive_layout.dart';
 import '../../adaptive/adaptive_presenter.dart';
-import '../../utils/dropped_file_reader.dart';
-import '../../utils/internal_drag_protocol.dart';
-import '../../providers/image_generation_provider.dart';
+import '../../utils/card_drop_reader.dart';
 import '../../widgets/common/app_toast.dart';
 import 'document_transaction.dart';
 import 'controllers/magic_wand_controller.dart';
@@ -1497,17 +1494,14 @@ class ImageEditorWorkspaceState extends State<ImageEditorWorkspace> {
     }
 
     return DropRegion(
-      formats: Formats.standardFormats,
+      formats: cardDropFormats,
       hitTestBehavior: HitTestBehavior.opaque,
       onDropOver: (event) {
         if (_isImportingDroppedImage) {
           return DropOperation.none;
         }
 
-        final isInternalDrag = event.session.items.any(
-          (item) => isGalleryInternalDragLocalData(item.localData),
-        );
-        if (isInternalDrag) {
+        if (!const CardDropPolicy().accepts(event.session.items)) {
           return DropOperation.none;
         }
 
@@ -1516,7 +1510,7 @@ class ImageEditorWorkspaceState extends State<ImageEditorWorkspace> {
             : DropOperation.none;
       },
       onPerformDrop: (event) async {
-        unawaited(_handleDroppedImageLayerDrop(event));
+        await _handleDroppedImageLayerDrop(event);
       },
       child: child,
     );
@@ -1529,47 +1523,20 @@ class ImageEditorWorkspaceState extends State<ImageEditorWorkspace> {
 
     setState(() => _isImportingDroppedImage = true);
     try {
-      var handledAny = false;
-      final generationState = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(imageGenerationNotifierProvider);
-      for (final item in event.session.items) {
-        final internalPayload = resolveInternalHistoryDropPayload(
-          item.localData,
-          generationState,
+      final resources = await readCardDrop(context, event.session.items);
+      for (final resource in resources) {
+        if (!mounted) return;
+        await _importDroppedImageLayer(
+          resource.image.fileName,
+          resource.image.bytes,
         );
-        if (internalPayload != null) {
-          handledAny = true;
-          await _importDroppedImageLayer(
-            internalPayload.fileName,
-            internalPayload.bytes,
-          );
-          continue;
-        }
-
-        final reader = item.dataReader;
-        if (reader == null) {
-          continue;
-        }
-
-        final fileData = await DroppedFileReader.read(
-          reader,
-          allowVibeFiles: false,
-          logTag: 'ImageEditorDrop',
-        );
-        if (fileData == null) {
-          continue;
-        }
-
-        handledAny = true;
-        await _importDroppedImageLayer(fileData.fileName, fileData.bytes);
       }
-
-      if (!handledAny && mounted) {
+    } catch (error, stack) {
+      AppLogger.e('Image layer drop failed', error, stack, 'ImageEditorDrop');
+      if (mounted) {
         AppToast.error(
           context,
-          context.l10n.toast_unreadableDroppedImageSource,
+          '${context.l10n.toast_unreadableDroppedImageSource}: $error',
         );
       }
     } finally {
@@ -2261,13 +2228,13 @@ class ImageEditorWorkspaceState extends State<ImageEditorWorkspace> {
               const SizedBox(height: 4),
               Text(
                 switch ((clamped, target.isOriginal)) {
-                  ((final size?, _)) => context.l10n
-                      .editor_compressionClampedToLimit(
-                        target.width,
-                        target.height,
-                        size.width,
-                        size.height,
-                      ),
+                  ((final size?, _)) =>
+                    context.l10n.editor_compressionClampedToLimit(
+                      target.width,
+                      target.height,
+                      size.width,
+                      size.height,
+                    ),
                   ((_, true)) => context.l10n.editor_compressionUncompressed,
                   ((_, false)) => context.l10n.editor_compressionApplyOnDone,
                 },

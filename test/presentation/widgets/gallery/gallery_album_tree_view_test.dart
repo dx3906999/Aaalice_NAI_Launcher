@@ -37,7 +37,7 @@ void main() {
           totalImageCount: 1,
           favoriteCount: 0,
           onAlbumSelected: (_) {},
-          onImageFavoriteDrop: (_) {},
+          onImagesFavoriteDrop: (_) async {},
         ),
       ),
     );

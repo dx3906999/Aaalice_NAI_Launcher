@@ -521,11 +521,16 @@ void main() {
     await tester.pump();
 
     final motion = find.byType(ImageCardHoverMotion);
-    expect(tester.widget<ImageCardHoverMotion>(motion).hovered, isTrue);
+    expect(tester.widget<ImageCardHoverMotion>(motion.first).hovered, isTrue);
     expect(
       tester
           .widget<AnimatedScale>(
-            find.descendant(of: motion, matching: find.byType(AnimatedScale)),
+            find
+                .descendant(
+                  of: motion.first,
+                  matching: find.byType(AnimatedScale),
+                )
+                .first,
           )
           .scale,
       ImageCardHoverMotion.hoverScale,

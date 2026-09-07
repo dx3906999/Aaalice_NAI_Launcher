@@ -218,7 +218,7 @@ void main() {
     addTearDown(gesture.removePointer);
     await gesture.up();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.byType(ProContextMenu), findsOneWidget);
     final menuTopLeft = tester.getTopLeft(find.byType(ProContextMenu));

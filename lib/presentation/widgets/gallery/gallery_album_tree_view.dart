@@ -9,11 +9,9 @@ import '../../../core/utils/localization_extension.dart';
 import '../../adaptive/interaction_policy.dart';
 import '../../../data/models/gallery/gallery_album.dart';
 import '../../../data/models/gallery/gallery_tree_drop_slot.dart';
-import '../../../data/models/gallery/local_image_record.dart';
 import '../common/context_menu_anchor.dart';
 import '../common/themed_input.dart';
-import 'gallery_category_tree_view.dart'
-    show galleryFilePathFromDataReader, galleryInternalDragPathFromLocalData;
+import '../../utils/gallery_drop_reader.dart';
 import 'gallery_sidebar.dart';
 
 enum _AlbumAction { rename, addSubAlbum, moveUp, moveToRoot, delete }
@@ -39,8 +37,9 @@ class GalleryAlbumTreeView extends StatefulWidget {
     GalleryTreeDropSlot slot,
   )?
   onAlbumMoveToSlot;
-  final void Function(String imagePath, String albumId)? onImageDrop;
-  final void Function(String imagePath)? onImageFavoriteDrop;
+  final Future<void> Function(List<String> imagePaths, String albumId)?
+  onImagesDrop;
+  final Future<void> Function(List<String> imagePaths)? onImagesFavoriteDrop;
   final VoidCallback? onCreateAlbumRequest;
 
   const GalleryAlbumTreeView({
@@ -57,8 +56,8 @@ class GalleryAlbumTreeView extends StatefulWidget {
     this.onAddAlbumRequest,
     this.onAlbumMove,
     this.onAlbumMoveToSlot,
-    this.onImageDrop,
-    this.onImageFavoriteDrop,
+    this.onImagesDrop,
+    this.onImagesFavoriteDrop,
     this.onCreateAlbumRequest,
   });
 
@@ -142,14 +141,14 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
   }
 
   Widget _wrapFavoriteDropTarget(Widget child) {
-    final onDrop = widget.onImageFavoriteDrop;
+    final onDrop = widget.onImagesFavoriteDrop;
     if (onDrop == null) return child;
     return DropRegion(
-      formats: const [Formats.fileUri],
+      formats: galleryDropFormats,
       onDropOver: (event) {
-        final accepts = event.session.items.any(
-          (item) =>
-              galleryInternalDragPathFromLocalData(item.localData) != null,
+        final accepts = canAcceptGalleryDrop(
+          event.session.items,
+          internalOnly: true,
         );
         if (_favoriteDropActive != accepts) {
           setState(() => _favoriteDropActive = accepts);
@@ -161,13 +160,7 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
       },
       onPerformDrop: (event) async {
         if (_favoriteDropActive) setState(() => _favoriteDropActive = false);
-        for (final item in event.session.items) {
-          final path = galleryInternalDragPathFromLocalData(item.localData);
-          if (path != null) {
-            HapticFeedback.heavyImpact();
-            onDrop(path);
-          }
-        }
+        await performGalleryDrop(context, event, onDrop, internalOnly: true);
       },
       child: AnimatedContainer(
         duration: MediaQuery.disableAnimationsOf(context)
@@ -411,23 +404,16 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
   }
 
   Widget _wrapDropTarget(GalleryAlbum album, List<Widget> children) {
-    if (widget.onImageDrop == null) {
+    if (widget.onImagesDrop == null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       );
     }
 
-    // 内层：应用内卡片拖拽（Flutter 原生 Draggable/DragTarget 协议）
-    final dragTarget = DragTarget<LocalImageRecord>(
-      onWillAcceptWithDetails: (details) => true,
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        widget.onImageDrop?.call(details.data.path, album.id);
-      },
-      builder: (context, candidate, rejected) {
-        final dragging =
-            candidate.isNotEmpty || _superDraggingAlbumIds.contains(album.id);
+    final dragTarget = Builder(
+      builder: (context) {
+        final dragging = _superDraggingAlbumIds.contains(album.id);
         return AnimatedContainer(
           duration: MediaQuery.disableAnimationsOf(context)
               ? Duration.zero
@@ -448,16 +434,16 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
       },
     );
 
-    // 外层：系统级文件拖放（文件管理器拖图入相簿），与分类树同一协议；
-    // 不支持平台（如 Android 应用内拖动已由内层覆盖）保持内层即可
+    // Touch albums use the explicit add-to-album action.
     if (!PlatformCapabilities.current.supportsExternalFileDrop) {
       return dragTarget;
     }
 
     return DropRegion(
-      formats: const [Formats.fileUri],
+      formats: galleryDropFormats,
       onDropOver: (event) {
-        if (event.session.allowedOperations.contains(DropOperation.copy)) {
+        if (event.session.allowedOperations.contains(DropOperation.copy) &&
+            canAcceptGalleryDrop(event.session.items)) {
           if (!_superDraggingAlbumIds.contains(album.id)) {
             setState(() => _superDraggingAlbumIds.add(album.id));
           }
@@ -474,26 +460,11 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
         if (_superDraggingAlbumIds.contains(album.id)) {
           setState(() => _superDraggingAlbumIds.remove(album.id));
         }
-        for (final item in event.session.items) {
-          final internalPath = galleryInternalDragPathFromLocalData(
-            item.localData,
-          );
-          if (internalPath != null) {
-            HapticFeedback.heavyImpact();
-            widget.onImageDrop?.call(internalPath, album.id);
-            continue;
-          }
-
-          final reader = item.dataReader;
-          if (reader == null) continue;
-          if (reader.canProvide(Formats.fileUri)) {
-            final filePath = await galleryFilePathFromDataReader(reader);
-            if (filePath != null) {
-              HapticFeedback.heavyImpact();
-              widget.onImageDrop?.call(filePath, album.id);
-            }
-          }
-        }
+        await performGalleryDrop(
+          context,
+          event,
+          (paths) => widget.onImagesDrop!(paths, album.id),
+        );
       },
       child: dragTarget,
     );

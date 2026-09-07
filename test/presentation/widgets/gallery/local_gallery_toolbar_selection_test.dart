@@ -1,3 +1,4 @@
+import 'package:nai_launcher/presentation/widgets/common/image_card_action.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -296,7 +297,31 @@ Future<ProviderContainer> _pumpToolbar(
                 enableSearchAutocomplete: false,
                 showPageTitle: showPageTitle,
                 onToggleCategoryPanel: _noop,
-                onRemoveFromAlbum: onRemoveFromAlbum,
+                batchActions: [
+                  const ImageCardAction(
+                    id: ImageCardActionId.classify,
+                    icon: Icons.drive_file_move_outline,
+                    label: '移动到分类',
+                    supportsBatch: true,
+                    invoke: _noop,
+                  ),
+                  const ImageCardAction(
+                    id: ImageCardActionId.delete,
+                    icon: Icons.delete_outline,
+                    label: '删除',
+                    supportsBatch: true,
+                    isDanger: true,
+                    invoke: _noop,
+                  ),
+                  if (onRemoveFromAlbum != null)
+                    ImageCardAction(
+                      id: ImageCardActionId.removeFromAlbum,
+                      icon: Icons.playlist_remove,
+                      label: '移出相簿',
+                      supportsBatch: true,
+                      invoke: onRemoveFromAlbum,
+                    ),
+                ],
               ),
             ),
           ),

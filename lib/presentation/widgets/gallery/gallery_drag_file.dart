@@ -32,7 +32,10 @@ class GalleryDragFile {
   Future<void>? _releaseFuture;
 
   /// 手势在准备期间取消时不再发布文件，但仍等待写入结束并回收。
-  Future<bool> addImage(SanitizedShareImage image) async {
+  Future<bool> addImage(
+    SanitizedShareImage image, {
+    FileFormat format = Formats.png,
+  }) async {
     try {
       if (_released) return false;
       // 同毫秒内的多个拖拽数据项也必须各自拥有文件，不能互相提前删除。
@@ -44,7 +47,7 @@ class GalleryDragFile {
         ),
       );
       if (_released) return false;
-      item.add(Formats.png(image.bytes));
+      item.add(format(image.bytes));
       item.add(Formats.fileUri(_file!.uri));
       return true;
     } catch (_) {

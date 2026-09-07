@@ -1,3 +1,4 @@
+import 'image_card_action.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -69,6 +70,8 @@ class ImageCardCapabilities {
     required this.enableSaveAction,
     required this.enableCopyAction,
     required this.enableSelection,
+    this.selectionMode = false,
+    this.showSelectionOnHover = true,
     required this.onTap,
     required this.onDoubleTap,
     required this.onLongPress,
@@ -101,25 +104,27 @@ class ImageCardCapabilities {
   final bool enableSaveAction;
   final bool enableCopyAction;
   final bool enableSelection;
+  final bool selectionMode;
+  final bool showSelectionOnHover;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onLongPress;
   final ValueChanged<bool>? onSelectionChanged;
-  final VoidCallback? onFullscreen;
-  final VoidCallback? onUpscale;
-  final VoidCallback? onReversePrompt;
-  final VoidCallback? onImageToImage;
-  final VoidCallback? onVibeTransfer;
-  final VoidCallback? onPreciseReference;
-  final VoidCallback? onSaveToPreciseRefLibrary;
-  final VoidCallback? onEditImage;
-  final VoidCallback? onInpaint;
-  final VoidCallback? onGenerateVariations;
-  final VoidCallback? onDirectorTools;
-  final VoidCallback? onEnhance;
-  final VoidCallback? onSendToKrita;
-  final VoidCallback? onShareToDiscord;
-  final VoidCallback? onOpenInExplorer;
+  final ImageCardCallback? onFullscreen;
+  final ImageCardCallback? onUpscale;
+  final ImageCardCallback? onReversePrompt;
+  final ImageCardCallback? onImageToImage;
+  final ImageCardCallback? onVibeTransfer;
+  final ImageCardCallback? onPreciseReference;
+  final ImageCardCallback? onSaveToPreciseRefLibrary;
+  final ImageCardCallback? onEditImage;
+  final ImageCardCallback? onInpaint;
+  final ImageCardCallback? onGenerateVariations;
+  final ImageCardCallback? onDirectorTools;
+  final ImageCardCallback? onEnhance;
+  final ImageCardCallback? onSendToKrita;
+  final ImageCardCallback? onShareToDiscord;
+  final ImageCardCallback? onOpenInExplorer;
   final void Function(Uint8List imageBytes, String prompt)? onSaveToLibrary;
-  final VoidCallback? onFavoriteToggle;
+  final ImageCardCallback? onFavoriteToggle;
 }

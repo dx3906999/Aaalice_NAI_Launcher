@@ -17,6 +17,7 @@ import '../../providers/replication_queue_provider.dart';
 import '../../providers/selection_mode_provider.dart';
 import '../../services/gallery_prompt_projection_service.dart';
 import '../../widgets/common/app_toast.dart';
+import '../../widgets/common/image_card_action.dart';
 import 'online_gallery_utils.dart';
 
 class OnlineGallerySelectionActions {
@@ -24,6 +25,52 @@ class OnlineGallerySelectionActions {
 
   final BuildContext context;
   final WidgetRef ref;
+
+  List<ImageCardAction> buildActions(
+    OnlineGalleryState state,
+    Set<String> selectedIds,
+  ) {
+    final posts = List<GalleryItem>.unmodifiable(
+      state.posts.where((post) => selectedIds.contains(post.stableKey)),
+    );
+    final complete = posts.length == selectedIds.length && posts.isNotEmpty;
+    final theme = Theme.of(context);
+    return [
+      ImageCardAction(
+        id: ImageCardActionId.addToQueue,
+        icon: Icons.playlist_add,
+        label: context.l10n.onlineGallery_addToQueue,
+        iconColor: theme.colorScheme.primary,
+        supportsBatch: true,
+        enabled: complete,
+        invoke: () => addSelectedToQueue(posts),
+      ),
+      if (posts.every(
+        (post) =>
+            post.sourceId.capabilities.supportsWritableFavorites ||
+            post.sourceId.capabilities.supportsLocalFavorites,
+      ))
+        ImageCardAction(
+          id: ImageCardActionId.favorite,
+          icon: Icons.favorite_border,
+          label: context.l10n.onlineGallery_bulkFavorite,
+          iconColor: theme.colorScheme.secondary,
+          supportsBatch: true,
+          enabled: complete,
+          invoke: () => favoriteSelected(posts),
+        ),
+      if (posts.every((post) => post.hasValidPreview))
+        ImageCardAction(
+          id: ImageCardActionId.save,
+          icon: Icons.download,
+          label: context.l10n.onlineGallery_bulkDownload,
+          iconColor: theme.colorScheme.tertiary,
+          supportsBatch: true,
+          enabled: complete,
+          invoke: () => downloadSelected(posts),
+        ),
+    ];
+  }
 
   OnlineGalleryNotifier get _galleryNotifier =>
       ref.read(onlineGalleryNotifierProvider.notifier);
@@ -122,15 +169,17 @@ class OnlineGallerySelectionActions {
     }
   }
 
-  Future<void> addSelectedToQueue() async {
+  Future<void> addSelectedToQueue([List<GalleryItem>? targets]) async {
     final selectionState = ref.read(onlineGallerySelectionNotifierProvider);
     final galleryState = ref.read(onlineGalleryNotifierProvider);
     final promptTagSettings = ref.read(onlineGalleryPromptTagSettingsProvider);
     final outputFilter = ref.read(onlineGalleryOutputFilterProvider);
 
-    final selectedPosts = galleryState.posts
-        .where((p) => selectionState.selectedIds.contains(p.stableKey))
-        .toList();
+    final selectedPosts =
+        targets ??
+        galleryState.posts
+            .where((p) => selectionState.selectedIds.contains(p.stableKey))
+            .toList();
 
     if (selectedPosts.isEmpty) return;
 
@@ -194,17 +243,19 @@ class OnlineGallerySelectionActions {
   }
 
   /// 批量收藏
-  Future<void> favoriteSelected() async {
+  Future<void> favoriteSelected([List<GalleryItem>? targets]) async {
     final selectionState = ref.read(onlineGallerySelectionNotifierProvider);
     final galleryState = ref.read(onlineGalleryNotifierProvider);
     final source = _activeSource(galleryState);
-    final selectedPosts = galleryState.posts
-        .where(
-          (post) =>
-              post.sourceId == source &&
-              selectionState.selectedIds.contains(post.stableKey),
-        )
-        .toList();
+    final selectedPosts =
+        targets ??
+        galleryState.posts
+            .where(
+              (post) =>
+                  post.sourceId == source &&
+                  selectionState.selectedIds.contains(post.stableKey),
+            )
+            .toList();
     if (selectedPosts.isEmpty) return;
 
     var count = 0;
@@ -228,13 +279,15 @@ class OnlineGallerySelectionActions {
   }
 
   /// 批量下载
-  Future<void> downloadSelected() async {
+  Future<void> downloadSelected([List<GalleryItem>? targets]) async {
     final selectionState = ref.read(onlineGallerySelectionNotifierProvider);
     final galleryState = ref.read(onlineGalleryNotifierProvider);
 
-    final selectedPosts = galleryState.posts
-        .where((p) => selectionState.selectedIds.contains(p.stableKey))
-        .toList();
+    final selectedPosts =
+        targets ??
+        galleryState.posts
+            .where((p) => selectionState.selectedIds.contains(p.stableKey))
+            .toList();
 
     if (selectedPosts.isEmpty) return;
 

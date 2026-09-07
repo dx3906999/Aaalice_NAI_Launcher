@@ -7,6 +7,7 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../utils/dropped_file_reader.dart';
 import '../../utils/internal_drag_protocol.dart';
+import '../../utils/card_drop_reader.dart';
 
 class GlobalDropController extends ChangeNotifier {
   GlobalDropController({
@@ -33,7 +34,14 @@ class GlobalDropController extends ChangeNotifier {
     final isGalleryInternalDrag = event.session.items.any(
       (item) => isGalleryInternalDragLocalData(item.localData),
     );
-    if (isGalleryInternalDrag) return DropOperation.none;
+    if (isGalleryInternalDrag ||
+        !const CardDropPolicy(
+          allowMultiple: false,
+          allowVibes: true,
+          allowPreciseReferences: false,
+        ).accepts(event.session.items)) {
+      return DropOperation.none;
+    }
     if (!event.session.allowedOperations.contains(DropOperation.copy)) {
       return DropOperation.none;
     }

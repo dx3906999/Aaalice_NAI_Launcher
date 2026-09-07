@@ -1,3 +1,4 @@
+import '../../widgets/common/image_card_context_menu.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1568,20 +1569,22 @@ Future<void> _showAgentChatImageSendMenu({
   final mosaicEnabled = ref.read(
     mosaicSettingsProvider.select((state) => state.configuration.enabled),
   );
-  final action = await LocalImageContextMenu.showSendActions(
-    context,
-    position: position,
-    isKritaConnected: isKritaConnected,
-    watermarkEnabled: watermarkEnabled,
-    mosaicEnabled: mosaicEnabled,
-  );
-  if (action == null || !context.mounted) return;
-  await ImageSendActionDispatcher.handle(
+  await ImageCardContextMenu.show(
     context: context,
-    ref: ref,
-    action: action,
-    fileName: fileName,
-    loadBytes: () async => Uint8List.fromList(await loadBytes()),
+    position: position,
+    actions: LocalImageContextMenu.buildSendActions(
+      context,
+      isKritaConnected: isKritaConnected,
+      watermarkEnabled: watermarkEnabled,
+      mosaicEnabled: mosaicEnabled,
+      onAction: (action) => ImageSendActionDispatcher.handle(
+        context: context,
+        ref: ref,
+        action: action,
+        fileName: fileName,
+        loadBytes: () async => Uint8List.fromList(await loadBytes()),
+      ),
+    ),
   );
 }
 

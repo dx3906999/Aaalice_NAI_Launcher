@@ -448,7 +448,7 @@ Future<void> _pumpTouchImportFlow(
                   selectionState: const SelectionModeState(),
                   currentModel: 'nai-diffusion-4-full',
                   controller: controller,
-                  onCommand: (command) {
+                  onCommand: (command) async {
                     commands.add(command);
                     if (command is! ShowImportMenuCommand) return;
                     context.showImportMenu(
@@ -558,7 +558,9 @@ Future<void> _pumpWorkspace(
               selectionState: const SelectionModeState(),
               currentModel: 'nai-diffusion-4-full',
               controller: controller,
-              onCommand: commands.add,
+              onCommand: (command) async {
+                commands.add(command);
+              },
             ),
           ),
         ),

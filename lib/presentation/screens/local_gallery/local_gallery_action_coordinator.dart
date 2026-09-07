@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import '../../utils/zip_export_progress.dart';
+import '../../widgets/common/image_card_action.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -168,16 +169,22 @@ class LocalGalleryActionCoordinator {
   MosaicDerivativeRegistry get _mosaicRegistry =>
       MosaicDerivativeRegistry(_ref.read(localStorageServiceProvider));
 
-  Future<List<LocalImageRecord>> _selectedImages() async {
-    final selectedIds = _ref
-        .read(localGallerySelectionNotifierProvider)
-        .selectedIds
-        .toList();
+  Future<List<LocalImageRecord>> _selectedImages([Set<String>? targets]) async {
+    final selectedIds =
+        (targets ??
+                _ref.read(localGallerySelectionNotifierProvider).selectedIds)
+            .toList();
     if (selectedIds.isEmpty) return const [];
     final service = await _ref
         .read(localGalleryNotifierProvider.notifier)
         .getService();
-    return service.getRecordsByPaths(selectedIds);
+    final records = await service.getRecordsByPaths(selectedIds);
+    final byPath = {for (final record in records) record.path: record};
+    final missing = selectedIds.where((id) => !byPath.containsKey(id)).toList();
+    if (missing.isNotEmpty) {
+      throw StateError('Local images are unavailable: ${missing.join(', ')}');
+    }
+    return [for (final id in selectedIds) byPath[id]!];
   }
 
   Future<void> undo() async {
@@ -196,10 +203,10 @@ class LocalGalleryActionCoordinator {
     }
   }
 
-  Future<void> deleteSelectedImages() async {
+  Future<void> deleteSelectedImages([Set<String>? targets]) async {
     final context = _context();
     final l10n = context.l10n;
-    final selectedImages = await _selectedImages();
+    final selectedImages = await _selectedImages(targets);
     if (selectedImages.isEmpty || !_mounted()) return;
     final confirmed = await ThemedConfirmDialog.show(
       context: _context(),
@@ -249,8 +256,8 @@ class LocalGalleryActionCoordinator {
     }
   }
 
-  Future<void> packSelectedImages() async {
-    final selectedImages = await _selectedImages();
+  Future<void> packSelectedImages([Set<String>? targets]) async {
+    final selectedImages = await _selectedImages(targets);
     if (selectedImages.isEmpty || !_mounted()) return;
     final includeMetadata = await ZipExportMetadataDialog.show(_context());
     if (includeMetadata == null || !_mounted()) return;
@@ -347,19 +354,18 @@ class LocalGalleryActionCoordinator {
     await showLocalGalleryZipFailureDetails(_context(), result);
   }
 
-  void editSelectedMetadata() {
-    if (_ref
-            .read(localGallerySelectionNotifierProvider)
-            .selectedIds
-            .isNotEmpty &&
-        _mounted()) {
-      showBulkMetadataEditDialog(_context());
+  Future<void> editSelectedMetadata([Set<String>? targets]) async {
+    final ids = Set<String>.of(
+      targets ?? _ref.read(localGallerySelectionNotifierProvider).selectedIds,
+    );
+    if (ids.isNotEmpty && _mounted()) {
+      await showBulkMetadataEditDialog(_context(), targetIds: ids);
     }
   }
 
-  Future<void> moveSelectedToCategory() async {
+  Future<void> moveSelectedToCategory([Set<String>? targets]) async {
     final l10n = _context().l10n;
-    final selectedImages = await _selectedImages();
+    final selectedImages = await _selectedImages(targets);
     if (selectedImages.isEmpty || !_mounted()) return;
     final categoryState = _ref.read(galleryCategoryNotifierProvider);
     final moveTargets = buildLocalGalleryMoveTargets(categoryState.categories);
@@ -372,6 +378,29 @@ class LocalGalleryActionCoordinator {
       targets: moveTargets,
     );
     if (selectedCategoryId == null || !_mounted()) return;
+    await _moveImagesToCategory(selectedImages, selectedCategoryId);
+  }
+
+  Future<void> moveImagesToCategory(
+    List<String> paths,
+    String? categoryId,
+  ) async {
+    final images = await _selectedImages(paths.toSet());
+    if (images.isEmpty || !_mounted()) return;
+    await _moveImagesToCategory(images, categoryId);
+  }
+
+  Future<void> _moveImagesToCategory(
+    List<LocalImageRecord> selectedImages,
+    String? selectedCategoryId,
+  ) async {
+    final l10n = _context().l10n;
+    final categories = _ref.read(galleryCategoryNotifierProvider.notifier);
+    final gallery = _ref.read(localGalleryNotifierProvider.notifier);
+    final albums = _ref.read(galleryAlbumNotifierProvider.notifier);
+    final selection = _ref.read(localGallerySelectionNotifierProvider.notifier);
+    final watermark = _watermarkRegistry;
+    final mosaic = _mosaicRegistry;
     final protected = await AssetProtectionGuard.confirmDangerousAction(
       context: _context(),
       ref: _ref,
@@ -383,41 +412,45 @@ class LocalGalleryActionCoordinator {
       icon: Icons.drive_file_move_outline,
     );
     if (!protected || !_mounted()) return;
-    var movedCount = 0;
-    for (final image in selectedImages) {
-      final newPath = await _ref
-          .read(galleryCategoryNotifierProvider.notifier)
-          .moveImageToCategory(image.path, selectedCategoryId);
-      if (newPath == null) continue;
-      await _watermarkRegistry.relocatePath(
-        oldPath: image.path,
-        newPath: newPath,
+    final movedPaths = <String>[];
+    final result = await ImageCardBatchResult.execute(selectedImages, (
+      image,
+    ) async {
+      final newPath = await categories.moveImageToCategory(
+        image.path,
+        selectedCategoryId,
       );
-      await _mosaicRegistry.relocatePath(oldPath: image.path, newPath: newPath);
-      movedCount++;
+      if (newPath == null) {
+        throw StateError('Unable to move image: ${image.path}');
+      }
+      movedPaths.add(image.path);
+      await watermark.relocatePath(oldPath: image.path, newPath: newPath);
+      await mosaic.relocatePath(oldPath: image.path, newPath: newPath);
+    });
+    if (movedPaths.isNotEmpty) {
+      selection.removeDeleted(movedPaths);
+      await gallery.refresh(scan: false);
+      await albums.exportSidecarNow();
     }
-    if (!_mounted()) return;
-    if (movedCount > 0) {
+    result.requireComplete();
+    if (_mounted()) {
       AppToast.info(
         _context(),
-        _context().l10n.localGallery_movedImages(movedCount),
+        _context().l10n.localGallery_movedImages(result.succeeded.length),
       );
-      _ref.read(localGallerySelectionNotifierProvider.notifier).exit();
-      _ref.read(localGalleryNotifierProvider.notifier).refresh();
-      // 物理移动改变了成员文件路径，立即刷新 sidecar 保持跨设备引用有效
-      unawaited(
-        _ref.read(galleryAlbumNotifierProvider.notifier).exportSidecarNow(),
-      );
-    } else {
-      AppToast.info(_context(), _context().l10n.localGallery_moveImagesFailed);
     }
   }
 
   /// 把选中图片移出当前浏览的相簿（仅解除引用，不动物理文件）
-  Future<void> removeSelectedFromAlbum() async {
-    final albumId = _ref.read(galleryAlbumNotifierProvider).selectedAlbumId;
+  Future<void> removeSelectedFromAlbum([
+    Set<String>? targets,
+    String? targetAlbumId,
+  ]) async {
+    final albumId =
+        targetAlbumId ??
+        _ref.read(galleryAlbumNotifierProvider).selectedAlbumId;
     if (albumId == null || albumId == 'favorites') return;
-    final selectedImages = await _selectedImages();
+    final selectedImages = await _selectedImages(targets);
     if (selectedImages.isEmpty || !_mounted()) return;
     final removed = await _ref
         .read(galleryAlbumNotifierProvider.notifier)
@@ -437,8 +470,8 @@ class LocalGalleryActionCoordinator {
     }
   }
 
-  Future<void> addSelectedToAlbum() async {
-    final selectedImages = await _selectedImages();
+  Future<void> addSelectedToAlbum([Set<String>? targets]) async {
+    final selectedImages = await _selectedImages(targets);
     if (selectedImages.isEmpty || !_mounted()) return;
     final result = await AlbumSelectDialog.show(_context());
     if (result == null || !_mounted()) return;

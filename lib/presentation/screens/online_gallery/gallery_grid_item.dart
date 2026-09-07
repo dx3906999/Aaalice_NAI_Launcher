@@ -144,6 +144,18 @@ class _GalleryGridItemState extends State<GalleryGridItem> {
     GalleryDetail? detail,
   }) {
     return AgentResourceDragSource(
+      selectionId: item.stableKey,
+      referenceForSelection: (id) {
+        final prefix = '${item.sourceId.key}:';
+        if (!id.startsWith(prefix)) {
+          throw StateError('Gallery drag contains a different source: $id');
+        }
+        return AgentChatResourceReference(
+          kind: AgentChatResourceKind.onlineGalleryMedia,
+          source: item.sourceId.key,
+          resourceId: id.substring(prefix.length),
+        );
+      },
       reference: AgentChatResourceReference(
         kind: AgentChatResourceKind.onlineGalleryMedia,
         source: item.sourceId.key,

@@ -155,14 +155,25 @@ class AppToast {
     String message, {
     double? progress,
     String? subtitle,
+  }) => showProgressOnOverlay(
+    Overlay.maybeOf(context, rootOverlay: true),
+    message,
+    progress: progress,
+    subtitle: subtitle,
+  );
+
+  static ToastController showProgressOnOverlay(
+    OverlayState? overlay,
+    String message, {
+    double? progress,
+    String? subtitle,
   }) {
     // 进度通知是单例。替换时让旧控制器随旧 Entry 一并失效，
     // 避免旧任务稍后 dismiss/complete 误删新任务的通知。
     if (_progressEntry?.mounted == true) _progressEntry!.remove();
     _progressEntry = null;
 
-    final overlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (overlay == null) {
+    if (overlay == null || !overlay.mounted) {
       // 如果没有 Overlay，返回一个空操作的控制器
       return _NoOpToastController();
     }

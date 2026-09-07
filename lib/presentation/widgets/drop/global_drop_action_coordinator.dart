@@ -1,3 +1,5 @@
+import '../../utils/card_drop_reader.dart';
+import '../../../core/utils/vibe_export_utils.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -27,8 +29,6 @@ import '../../providers/replication_queue_provider.dart';
 import '../../providers/reverse_prompt_provider.dart';
 import '../../providers/vibe_library_provider.dart';
 import '../../router/app_routes.dart';
-import '../../utils/dropped_file_reader.dart';
-import '../../utils/internal_drag_protocol.dart';
 import '../../services/image_metadata_import_workflow.dart';
 import '../../utils/precise_ref_library_import_helper.dart';
 import '../common/app_toast.dart';
@@ -198,33 +198,34 @@ class GlobalDropActionCoordinator {
   };
 
   Future<List<DroppedFileData>> readDrop(PerformDropEvent event) async {
-    final files = <DroppedFileData>[];
-    for (final item in event.session.items) {
-      if (!context.mounted) return files;
-      final internalPayload = resolveInternalHistoryDropPayload(
-        item.localData,
-        ref.read(imageGenerationNotifierProvider),
+    try {
+      final resources = await readCardDrop(
+        context,
+        event.session.items,
+        policy: const CardDropPolicy(
+          allowMultiple: false,
+          allowVibes: true,
+          allowPreciseReferences: false,
+        ),
       );
-      if (internalPayload != null) {
-        files.add(internalPayload);
-        continue;
+      final resource = resources.single;
+      final vibe = resource.vibe;
+      if (vibe == null) return [resource.image];
+      final extension = vibe.isBundle ? 'naiv4vibebundle' : 'naiv4vibe';
+      return [
+        DroppedFileData(
+          fileName: '${vibe.name}.$extension',
+          bytes: await VibeExportUtils.portableEntryBytes(vibe),
+        ),
+      ];
+    } catch (error) {
+      if (context.mounted) {
+        _showError(
+          '${context.l10n.toast_unreadableDroppedImageSource}: $error',
+        );
       }
-
-      final reader = item.dataReader;
-      if (reader == null) continue;
-      final fileData = await DroppedFileReader.read(
-        reader,
-        allowVibeFiles: true,
-        logTag: 'DropHandler',
-      );
-      if (fileData != null) {
-        files.add(fileData);
-      }
+      rethrow;
     }
-    if (files.isEmpty && context.mounted) {
-      _showError(context.l10n.toast_unreadableDroppedImageSource);
-    }
-    return files;
   }
 
   Future<void> processDroppedFile(DroppedFileData fileData) async {

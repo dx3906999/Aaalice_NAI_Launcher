@@ -351,14 +351,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    expect(find.text('Create watermarked copy…'), findsOneWidget);
-    expect(find.text('Send to Agent'), findsOneWidget);
-    final menu = tester.widget<PopupMenuButton<Object>>(
-      find.byType(PopupMenuButton<Object>),
+    await tester.scrollUntilVisible(
+      find.text('Create watermarked copy…'),
+      160,
+      scrollable: find.byType(Scrollable).last,
     );
-    menu.onSelected!(LocalImageContextAction.createWatermark);
-    Navigator.of(tester.element(find.byType(PopupMenuButton<Object>))).pop();
+    await tester.tap(find.text('Create watermarked copy…'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(actions, contains(LocalImageContextAction.createWatermark));
   });
 
@@ -498,16 +498,14 @@ void main() {
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('移动到分类'), findsOneWidget);
-    final classifyItem = find.byWidgetPredicate(
-      (widget) =>
-          widget is PopupMenuItem<Object> &&
-          widget.value == LocalImageContextAction.moveToCategory,
+    await tester.scrollUntilVisible(
+      find.text('移动到分类'),
+      200,
+      scrollable: find.byType(Scrollable).last,
     );
-    expect(classifyItem, findsOneWidget);
-
-    await tester.tap(classifyItem);
+    await tester.tap(find.text('移动到分类'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(selected, LocalImageContextAction.moveToCategory);
   });
 }

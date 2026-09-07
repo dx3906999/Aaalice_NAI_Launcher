@@ -24,9 +24,14 @@ import 'package:nai_launcher/presentation/widgets/common/themed_input.dart';
 /// Provides bulk metadata editing options for selected images
 /// 为选中的图片提供批量元数据编辑选项
 class BulkMetadataEditDialog extends ConsumerStatefulWidget {
-  const BulkMetadataEditDialog({super.key, this.scrollController});
+  const BulkMetadataEditDialog({
+    super.key,
+    this.scrollController,
+    this.targetIds,
+  });
 
   final ScrollController? scrollController;
+  final Set<String>? targetIds;
 
   @override
   ConsumerState<BulkMetadataEditDialog> createState() =>
@@ -43,6 +48,16 @@ class _BulkMetadataEditDialogState
 
   final List<String> _chipsToAdd = [];
   final List<String> _chipsToRemove = [];
+  late final Set<String> _targetIds;
+
+  @override
+  void initState() {
+    super.initState();
+    _targetIds = Set.unmodifiable(
+      widget.targetIds ??
+          ref.read(localGallerySelectionNotifierProvider).selectedIds,
+    );
+  }
 
   @override
   void dispose() {
@@ -57,8 +72,7 @@ class _BulkMetadataEditDialogState
     _addTagToAdd();
     _addTagToRemove();
 
-    final selectionState = ref.read(localGallerySelectionNotifierProvider);
-    final selectedIds = selectionState.selectedIds;
+    final selectedIds = _targetIds;
     if (selectedIds.isEmpty) {
       Navigator.of(context).pop();
       return;
@@ -82,9 +96,10 @@ class _BulkMetadataEditDialogState
 
     final navigator = Navigator.of(context, rootNavigator: true);
     final progressContext = navigator.context;
+    final gallery = ref.read(localGalleryNotifierProvider.notifier);
+    final notifier = ref.read(bulkOperationNotifierProvider.notifier);
     navigator.pop();
 
-    final notifier = ref.read(bulkOperationNotifierProvider.notifier);
     final operation = notifier.bulkEditMetadata(
       selectedIds.toList(),
       tagsToAdd: tagsToAdd,
@@ -95,9 +110,7 @@ class _BulkMetadataEditDialogState
     try {
       final result = await operation;
       if (result.success > 0) {
-        await ref
-            .read(localGalleryNotifierProvider.notifier)
-            .refresh(scan: false);
+        await gallery.refresh(scan: false);
       }
     } on Object {
       // BulkOperationNotifier exposes the localized failure in progress state.
@@ -406,41 +419,48 @@ class _BulkMetadataEditDialogState
 
 /// Show bulk metadata edit dialog
 /// 显示批量元数据编辑对话框
-void showBulkMetadataEditDialog(BuildContext context) {
-  unawaited(
-    AdaptivePresenter.showForm<void>(
-      context: context,
-      dialogWidth: 500,
-      titleBuilder: (panelContext) => Consumer(
-        builder: (context, ref, _) {
-          final selectedCount = ref
-              .watch(localGallerySelectionNotifierProvider)
-              .selectedIds
-              .length;
-          return Row(
-            children: [
-              Icon(
-                Icons.edit_outlined,
-                color: Theme.of(context).colorScheme.primary,
-                size: 20,
+Future<void> showBulkMetadataEditDialog(
+  BuildContext context, {
+  Set<String>? targetIds,
+}) {
+  final snapshot = Set<String>.unmodifiable(
+    targetIds ??
+        ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(localGallerySelectionNotifierProvider).selectedIds,
+  );
+  return AdaptivePresenter.showForm<void>(
+    context: context,
+    dialogWidth: 500,
+    titleBuilder: (panelContext) => Consumer(
+      builder: (context, ref, _) {
+        final selectedCount = snapshot.length;
+        return Row(
+          children: [
+            Icon(
+              Icons.edit_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.l10n.bulkMetadataEdit_title(selectedCount),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  context.l10n.bulkMetadataEdit_title(selectedCount),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-      builder: (panelContext, scrollController) =>
-          BulkMetadataEditDialog(scrollController: scrollController),
+            ),
+          ],
+        );
+      },
+    ),
+    builder: (panelContext, scrollController) => BulkMetadataEditDialog(
+      scrollController: scrollController,
+      targetIds: snapshot,
     ),
   );
 }

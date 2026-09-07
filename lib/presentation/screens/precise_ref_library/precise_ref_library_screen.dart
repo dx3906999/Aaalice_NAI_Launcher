@@ -1,3 +1,6 @@
+import '../../widgets/common/image_card_action.dart';
+import '../../widgets/common/image_card_batch_scope.dart';
+import '../../selection/card_selection_scope.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -24,14 +27,13 @@ import '../../adaptive/adaptive_presenter.dart';
 import '../../providers/image_generation_provider.dart';
 import '../../providers/precise_ref_library_provider.dart';
 import '../../providers/precise_ref_library_selection_provider.dart';
-import '../../providers/selection_mode_provider.dart';
 import '../../services/precise_ref_library_batch_sender.dart';
 import '../../router/app_routes.dart';
 import '../../services/image_workflow_launcher.dart';
-import '../../utils/dropped_file_reader.dart';
+import '../../utils/card_drop_reader.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../widgets/common/app_toast.dart';
 import '../../widgets/common/pagination_bar.dart';
-import '../../widgets/common/library_classification_drag.dart';
 import '../../widgets/common/precise_reference_type_dialog.dart';
 import '../../widgets/bulk_action_bar.dart';
 import '../../widgets/gallery/gallery_sidebar.dart';
@@ -264,61 +266,102 @@ class _PreciseRefLibraryScreenState
     }
   }
 
-  Future<void> _handleDrop(PerformDropEvent event) async {
-    // 在拖放会话仍存活时并发发起全部读取；逐个串行读取会导致
-    // 后续 item 的 reader 随会话释放而失效（platform reader not found）
-    final futures = <Future<DroppedFileData?>>[];
-    for (final item in event.session.items) {
-      final reader = item.dataReader;
-      if (reader == null) continue;
-      futures.add(
-        DroppedFileReader.read(
-          reader,
-          logTag: 'PreciseRefLibraryDrop',
-        ).catchError((Object _) => null),
-      );
-    }
-    final results = await Future.wait(futures);
-    if (!mounted) return;
+  static const _dropPolicy = CardDropPolicy(allowPreciseReferenceFiles: true);
 
-    final importType = _importType;
-    final validDrops = results
-        .whereType<DroppedFileData>()
-        .where((dropped) => dropped.bytes.isNotEmpty)
-        .toList();
-    final readFailureCount = results.length - validDrops.length;
-    final sources = [
-      for (final dropped in validDrops)
-        PreciseRefLibraryImportSource(
-          name: p.basenameWithoutExtension(dropped.fileName),
-          type: importType,
-          loadBytes: () async => dropped.bytes,
-        ),
-    ];
-    final PreciseRefLibraryBatchImportResult batch;
+  Future<void> _handleDrop(PerformDropEvent event) async {
     try {
-      batch = await ref
-          .read(preciseRefLibraryNotifierProvider.notifier)
-          .importMany(sources);
-    } catch (e) {
+      final resources = await readCardDrop(
+        context,
+        event.session.items,
+        policy: _dropPolicy,
+      );
+      if (!mounted) return;
+      // Native readers must finish here; business work runs after the OS loop.
+      unawaited(Future<void>(() => _importDroppedResources(resources)));
+    } catch (error, stack) {
+      AppLogger.e(
+        'Precise reference drop read failed',
+        error,
+        stack,
+        'PreciseRefLibrary',
+      );
       if (mounted) {
-        AppToast.error(context, context.l10n.preciseRefLib_importFailed('$e'));
+        AppToast.error(
+          context,
+          context.l10n.preciseRefLib_importFailed('$error'),
+        );
       }
-      return;
     }
+  }
+
+  Future<void> _importDroppedResources(
+    List<CardDroppedResource> resources,
+  ) async {
     if (!mounted) return;
-    final failedCount = readFailureCount + batch.failedCount;
-    if (batch.importedCount > 0) {
-      AppToast.success(
-        context,
-        context.l10n.preciseRefLib_importedCount(batch.importedCount),
+    final owner = ref.read(preciseRefLibraryNotifierProvider.notifier);
+    final archives = PreciseRefLibraryArchiveService(
+      ref.read(preciseRefLibraryStorageServiceProvider),
+    );
+    final importType = _importType;
+    var imported = 0;
+    try {
+      final result = await ImageCardBatchResult.execute(resources, (
+        resource,
+      ) async {
+        final file = resource.image;
+        if (p.extension(file.fileName).toLowerCase() == '.naipreciseref') {
+          final root = await getTemporaryDirectory();
+          final staging = await Directory(
+            p.join(root.path, 'precise-ref-drop'),
+          ).createTemp();
+          try {
+            final archive = File(
+              p.join(staging.path, 'resource.naipreciseref'),
+            );
+            await archive.writeAsBytes(file.bytes);
+            imported += (await archives.importFromPath(archive.path)).length;
+          } finally {
+            await staging.delete(recursive: true);
+          }
+        } else {
+          final reference = resource.preciseReference;
+          final batch = await owner.importMany([
+            PreciseRefLibraryImportSource(
+              name:
+                  reference?.name ?? p.basenameWithoutExtension(file.fileName),
+              type: reference?.type ?? importType,
+              strength: reference?.strength ?? 1,
+              fidelity: reference?.fidelity ?? 1,
+              loadBytes: () async => file.bytes,
+            ),
+          ]);
+          if (batch.failedCount != 0) {
+            throw StateError('Unable to import: ${file.fileName}');
+          }
+          imported += batch.importedCount;
+        }
+      });
+      if (imported > 0) await owner.reload(showLoading: false);
+      if (mounted && imported > 0) {
+        AppToast.success(
+          context,
+          context.l10n.preciseRefLib_importedCount(imported),
+        );
+      }
+      result.requireComplete();
+    } catch (error, stack) {
+      AppLogger.e(
+        'Precise reference drop import failed',
+        error,
+        stack,
+        'PreciseRefLibrary',
       );
-    }
-    if (failedCount > 0) {
-      AppToast.error(
-        context,
-        context.l10n.preciseRefLib_importFailedCount(failedCount),
-      );
+      if (mounted) {
+        AppToast.error(
+          context,
+          context.l10n.preciseRefLib_importFailed('$error'),
+        );
+      }
     }
   }
 
@@ -545,6 +588,14 @@ class _PreciseRefLibraryScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(preciseRefLibraryNotifierProvider);
+    ref.listen(
+      preciseRefLibraryNotifierProvider.select(
+        (s) => (s.searchQuery, s.favoritesOnly, s.typeFilter),
+      ),
+      (_, _) {
+        ref.read(preciseRefLibrarySelectionNotifierProvider.notifier).exit();
+      },
+    );
     final selection = ref.watch(preciseRefLibrarySelectionNotifierProvider);
 
     final content = LayoutBuilder(
@@ -597,12 +648,13 @@ class _PreciseRefLibraryScreenState
     final body = !PlatformCapabilities.current.supportsExternalFileDrop
         ? content
         : DropRegion(
-            formats: Formats.standardFormats,
+            formats: cardDropFormats,
             hitTestBehavior: HitTestBehavior.opaque,
             onDropOver: (event) {
               if (event.session.allowedOperations.contains(
-                DropOperation.copy,
-              )) {
+                    DropOperation.copy,
+                  ) &&
+                  _dropPolicy.accepts(event.session.items)) {
                 if (!_isDragging) {
                   setState(() => _isDragging = true);
                 }
@@ -617,19 +669,24 @@ class _PreciseRefLibraryScreenState
             },
             onPerformDrop: (event) async {
               setState(() => _isDragging = false);
-              // 不等待处理完成，让拖放回调立即返回（避免资源管理器卡死）
-              unawaited(_handleDrop(event));
+              await _handleDrop(event);
             },
             child: content,
           );
-    return PopScope<void>(
-      canPop: !selection.isActive,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && selection.isActive) {
-          ref.read(preciseRefLibrarySelectionNotifierProvider.notifier).exit();
-        }
-      },
-      child: Scaffold(body: body),
+    return ImageCardBatchScope(
+      targetIds: selection.selectedIds,
+      actions: _buildBatchActions(state, selection),
+      child: PopScope<void>(
+        canPop: !selection.isActive,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && selection.isActive) {
+            ref
+                .read(preciseRefLibrarySelectionNotifierProvider.notifier)
+                .exit();
+          }
+        },
+        child: Scaffold(body: body),
+      ),
     );
   }
 
@@ -825,6 +882,30 @@ class _PreciseRefLibraryScreenState
     ).map((entry) => entry.id).toList();
     final allSelected =
         pageIds.isNotEmpty && pageIds.every(selection.selectedIds.contains);
+    return Builder(
+      builder: (context) => BulkActionBar(
+        selectedCount: selection.selectedIds.length,
+        isAllSelected: allSelected,
+        onExit: () => ref
+            .read(preciseRefLibrarySelectionNotifierProvider.notifier)
+            .exit(),
+        onSelectAll: () {
+          final notifier = ref.read(
+            preciseRefLibrarySelectionNotifierProvider.notifier,
+          );
+          allSelected
+              ? notifier.deselectAll(pageIds)
+              : notifier.selectAll(pageIds);
+        },
+        actions: imageCardBulkItems(context),
+      ),
+    );
+  }
+
+  List<ImageCardAction> _buildBatchActions(
+    PreciseRefLibraryState state,
+    SelectionModeState selection,
+  ) {
     final selectedEntries = state.entries
         .where((entry) => selection.selectedIds.contains(entry.id))
         .toList();
@@ -832,125 +913,110 @@ class _PreciseRefLibraryScreenState
         selectedEntries.isNotEmpty &&
         selectedEntries.every((entry) => entry.isFavorite);
     final theme = Theme.of(context);
-    return BulkActionBar(
-      selectedCount: selection.selectedIds.length,
-      isAllSelected: allSelected,
-      onExit: () =>
-          ref.read(preciseRefLibrarySelectionNotifierProvider.notifier).exit(),
-      onSelectAll: () {
-        final notifier = ref.read(
-          preciseRefLibrarySelectionNotifierProvider.notifier,
-        );
-        allSelected
-            ? notifier.deselectAll(pageIds)
-            : notifier.selectAll(pageIds);
-      },
-      actions: [
-        BulkActionItem(
-          icon: Icons.send,
-          label: context.l10n.preciseRefLib_sendToPreciseRef,
-          color: theme.colorScheme.primary,
-          onPressed: selection.selectedIds.isEmpty
-              ? null
-              : () => _sendSelection(state, selection.selectedIds),
-        ),
-        BulkActionItem(
-          icon: Icons.category_outlined,
-          label: context.l10n.preciseRefLib_changeType,
-          color: theme.colorScheme.secondary,
-          onPressed: selection.selectedIds.isEmpty
-              ? null
-              : () => _changeSelectionType(selection.selectedIds),
-        ),
-        BulkActionItem(
-          icon: Icons.favorite_border,
-          label: allFavorite
-              ? context.l10n.common_unfavorite
-              : context.l10n.common_favorite,
-          color: theme.colorScheme.primary,
-          onPressed: selection.selectedIds.isEmpty
-              ? null
-              : () => _toggleSelectionFavorite(state, selection.selectedIds),
-        ),
-        BulkActionItem(
-          icon: Icons.file_upload_outlined,
-          label: context.l10n.common_export,
-          color: theme.colorScheme.secondary,
-          onPressed: selectedEntries.isEmpty || _isExporting
-              ? null
-              : () => _exportEntries(selectedEntries),
-        ),
-        BulkActionItem(
-          icon: Icons.delete_forever_outlined,
-          label: context.l10n.common_delete,
-          color: theme.colorScheme.error,
-          isDanger: true,
-          showDividerBefore: true,
-          onPressed: selection.selectedIds.isEmpty
-              ? null
-              : () => _deleteSelection(selection.selectedIds),
-        ),
-      ],
-    );
+    return [
+      ImageCardAction(
+        id: ImageCardActionId.preciseReference,
+        supportsBatch: true,
+        icon: Icons.send,
+        label: context.l10n.preciseRefLib_sendToPreciseRef,
+        iconColor: theme.colorScheme.primary,
+        invoke: () => _sendSelection(state, selection.selectedIds),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.classify,
+        supportsBatch: true,
+        icon: Icons.category_outlined,
+        label: context.l10n.preciseRefLib_changeType,
+        iconColor: theme.colorScheme.secondary,
+        invoke: () => _changeSelectionType(selection.selectedIds),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.favorite,
+        supportsBatch: true,
+        icon: Icons.favorite_border,
+        label: allFavorite
+            ? context.l10n.common_unfavorite
+            : context.l10n.common_favorite,
+        iconColor: theme.colorScheme.primary,
+        invoke: () => _toggleSelectionFavorite(state, selection.selectedIds),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.export,
+        supportsBatch: true,
+        icon: Icons.file_upload_outlined,
+        label: context.l10n.common_export,
+        iconColor: theme.colorScheme.secondary,
+        enabled: selectedEntries.isNotEmpty,
+        isLoading: _isExporting,
+        invoke: () => _exportEntries(selectedEntries),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.delete,
+        supportsBatch: true,
+        icon: Icons.delete_forever_outlined,
+        label: context.l10n.common_delete,
+        iconColor: theme.colorScheme.error,
+        isDanger: true,
+        invoke: () => _deleteSelection(selection.selectedIds),
+      ),
+    ];
   }
 
   Widget _buildGrid(PreciseRefLibraryState state, PreciseRefGridLayout layout) {
     final entries = _currentPageEntries(state);
     final selection = ref.watch(preciseRefLibrarySelectionNotifierProvider);
-    return GridView.builder(
-      key: const PageStorageKey('precise_ref_library_grid'),
-      padding: EdgeInsets.all(layout.padding),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: layout.columns,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        mainAxisExtent: layout.mainAxisExtent,
-      ),
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        final card = PreciseRefCard(
-          entry: entry,
-          isSelectionMode: selection.isActive,
-          isSelected: selection.selectedIds.contains(entry.id),
-          onToggleSelection: () => ref
-              .read(preciseRefLibrarySelectionNotifierProvider.notifier)
-              .toggle(entry.id),
-          onEnterSelectionMode: () => ref
-              .read(preciseRefLibrarySelectionNotifierProvider.notifier)
-              .enterAndSelect(entry.id),
-          onSendToPreciseRef: () => _sendToPreciseRef(entry),
-          onSendToImg2Img: () => _sendToImg2Img(entry),
-          onEdit: () => _editEntry(entry),
-          onDelete: () => _deleteEntry(entry),
-          onToggleFavorite: () {
-            ref
-                .read(preciseRefLibraryNotifierProvider.notifier)
-                .toggleFavorite(entry.id);
+    return CardSelectionScope(
+      selection: selection,
+      commands: ref.read(preciseRefLibrarySelectionNotifierProvider.notifier),
+      orderedIds: entries.map((e) => e.id).toList(),
+      child: CardSelectionShortcuts(
+        child: GridView.builder(
+          key: const PageStorageKey('precise_ref_library_grid'),
+          padding: EdgeInsets.all(layout.padding),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: layout.columns,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            mainAxisExtent: layout.mainAxisExtent,
+          ),
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
+            final card = PreciseRefCard(
+              entry: entry,
+              isSelectionMode: selection.isActive,
+              isSelected: selection.selectedIds.contains(entry.id),
+              onToggleSelection: () => ref
+                  .read(preciseRefLibrarySelectionNotifierProvider.notifier)
+                  .toggle(entry.id),
+              onEnterSelectionMode: () => ref
+                  .read(preciseRefLibrarySelectionNotifierProvider.notifier)
+                  .enterAndSelect(entry.id),
+              onSendToPreciseRef: () => _sendToPreciseRef(entry),
+              onSendToImg2Img: () => _sendToImg2Img(entry),
+              onEdit: () => _editEntry(entry),
+              onDelete: () => _deleteEntry(entry),
+              onToggleFavorite: () {
+                ref
+                    .read(preciseRefLibraryNotifierProvider.notifier)
+                    .toggleFavorite(entry.id);
+              },
+              onClassify: () => _classifyEntry(entry),
+            );
+            return AgentResourceDragSource(
+              key: Key('precise-ref-card-${entry.id}'),
+              enableAddToAgentAction: !selection.isActive,
+              reference: AgentChatResourceReference(
+                kind: AgentChatResourceKind.preciseRefLibraryEntry,
+                source: 'precise_reference_library',
+                resourceId: entry.id,
+                display: {'name': entry.name},
+              ),
+              child: card,
+            );
           },
-          onClassify: () => _classifyEntry(entry),
-        );
-        if (selection.isActive) {
-          return KeyedSubtree(
-            key: Key('precise-ref-card-${entry.id}'),
-            child: card,
-          );
-        }
-        return AgentResourceDragSource(
-          key: Key('precise-ref-card-${entry.id}'),
-          reference: AgentChatResourceReference(
-            kind: AgentChatResourceKind.preciseRefLibraryEntry,
-            source: 'precise_reference_library',
-            resourceId: entry.id,
-            display: {'name': entry.name},
-          ),
-          child: LibraryClassificationDragSource<PreciseRefLibraryEntry>(
-            data: entry,
-            label: entry.name,
-            child: card,
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 

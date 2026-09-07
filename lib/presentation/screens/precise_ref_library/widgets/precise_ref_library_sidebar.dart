@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nai_launcher/core/utils/localization_extension.dart';
 
@@ -23,9 +24,12 @@ class PreciseRefLibrarySidebar extends StatefulWidget {
   final void Function({required bool favoritesOnly, PreciseRefType? type})
   onFilterChanged;
   final bool modal;
-  final void Function(PreciseRefLibraryEntry entry, PreciseRefType type)?
+  final FutureOr<void> Function(
+    PreciseRefLibraryEntry entry,
+    PreciseRefType type,
+  )?
   onEntryTypeDrop;
-  final ValueChanged<PreciseRefLibraryEntry>? onFavoriteDrop;
+  final FutureOr<void> Function(PreciseRefLibraryEntry)? onFavoriteDrop;
 
   @override
   State<PreciseRefLibrarySidebar> createState() =>
@@ -69,8 +73,12 @@ class _PreciseRefLibrarySidebarState extends State<PreciseRefLibrarySidebar> {
                 padding: const EdgeInsets.only(bottom: 8),
                 children: [
                   LibraryClassificationDropTarget<PreciseRefLibraryEntry>(
+                    kind: AgentChatResourceKind.preciseRefLibraryEntry,
+                    resolve: (id) => state.entries
+                        .where((entry) => entry.id == id)
+                        .singleOrNull,
                     enabled: widget.onFavoriteDrop != null,
-                    canAccept: (entry) => !entry.isFavorite,
+                    needsChange: (entry) => !entry.isFavorite,
                     onAccept: (entry) => widget.onFavoriteDrop?.call(entry),
                     child: GallerySidebarFavoritesItem(
                       key: const Key('precise-ref-sidebar-favorites'),
@@ -84,8 +92,12 @@ class _PreciseRefLibrarySidebarState extends State<PreciseRefLibrarySidebar> {
                   ),
                   for (final type in PreciseRefType.values)
                     LibraryClassificationDropTarget<PreciseRefLibraryEntry>(
+                      kind: AgentChatResourceKind.preciseRefLibraryEntry,
+                      resolve: (id) => state.entries
+                          .where((entry) => entry.id == id)
+                          .singleOrNull,
                       enabled: widget.onEntryTypeDrop != null,
-                      canAccept: (entry) => entry.type != type,
+                      needsChange: (entry) => entry.type != type,
                       onAccept: (entry) =>
                           widget.onEntryTypeDrop?.call(entry, type),
                       child: GallerySidebarNavigationItem(

@@ -1,8 +1,10 @@
+import '../../utils/gallery_drop_reader.dart';
+export '../../utils/gallery_drop_reader.dart'
+    show galleryInternalDragPathFromLocalData;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:super_clipboard/super_clipboard.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../core/platform/platform_capabilities.dart';
@@ -10,7 +12,6 @@ import '../../../core/utils/localization_extension.dart';
 import '../../adaptive/interaction_policy.dart';
 import '../../../data/models/gallery/gallery_category.dart';
 import '../../../data/models/gallery/gallery_tree_drop_slot.dart';
-import '../../../data/models/gallery/local_image_record.dart';
 import '../common/context_menu_anchor.dart';
 import '../common/themed_divider.dart';
 import 'package:nai_launcher/presentation/widgets/common/themed_input.dart';
@@ -22,17 +23,6 @@ enum _GalleryCategoryAction {
   moveUp,
   moveToRoot,
   delete,
-}
-
-String? galleryInternalDragPathFromLocalData(Object? localData) {
-  if (localData is! Map) return null;
-
-  final source = localData['source'];
-  final path = localData['path'];
-  if (source == 'gallery_internal' && path is String && path.isNotEmpty) {
-    return path;
-  }
-  return null;
 }
 
 /// Gallery category tree view with drag-drop support
@@ -52,7 +42,8 @@ class GalleryCategoryTreeView extends StatefulWidget {
     GalleryTreeDropSlot slot,
   )?
   onCategoryMoveToSlot;
-  final void Function(String imagePath, String? categoryId)? onImageDrop;
+  final Future<void> Function(List<String> imagePaths, String? categoryId)?
+  onImagesDrop;
   final VoidCallback? onSyncWithFileSystem;
 
   /// 是否渲染顶部固定的「全部图片 / 收藏」节点；
@@ -73,7 +64,7 @@ class GalleryCategoryTreeView extends StatefulWidget {
     this.onAddSubCategory,
     this.onCategoryMove,
     this.onCategoryMoveToSlot,
-    this.onImageDrop,
+    this.onImagesDrop,
     this.onSyncWithFileSystem,
     this.includeRootNodes = true,
     this.embedded = false,
@@ -450,22 +441,13 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
     required String? categoryId,
     required Widget child,
   }) {
-    if (widget.onImageDrop == null) return child;
+    if (widget.onImagesDrop == null) return child;
 
-    // 构建 DragTarget 用于 Flutter 原生拖拽
-    final dragTarget = DragTarget<LocalImageRecord>(
-      onWillAcceptWithDetails: (_) => true,
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        widget.onImageDrop?.call(details.data.path, categoryId);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isAccepting = candidateData.isNotEmpty;
-        final isSuperDragging = _superDraggingCategoryIds.contains(
+    final dragTarget = Builder(
+      builder: (context) {
+        final showDropEffect = _superDraggingCategoryIds.contains(
           categoryId ?? '__root__',
         );
-        final showDropEffect = isAccepting || isSuperDragging;
-
         return AnimatedContainer(
           duration: MediaQuery.disableAnimationsOf(context)
               ? Duration.zero
@@ -491,15 +473,16 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
       },
     );
 
-    // Android 保留应用内分类拖动；跨应用文件拖放只在平台原生支持时启用。
+    // Touch classification is available through the explicit card action.
     if (!PlatformCapabilities.current.supportsExternalFileDrop) {
       return dragTarget;
     }
 
     return DropRegion(
-      formats: const [Formats.fileUri],
+      formats: galleryDropFormats,
       onDropOver: (event) {
-        if (event.session.allowedOperations.contains(DropOperation.copy)) {
+        if (event.session.allowedOperations.contains(DropOperation.copy) &&
+            canAcceptGalleryDrop(event.session.items)) {
           final key = categoryId ?? '__root__';
           if (!_superDraggingCategoryIds.contains(key)) {
             setState(() => _superDraggingCategoryIds.add(key));
@@ -520,80 +503,14 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
           setState(() => _superDraggingCategoryIds.remove(key));
         }
 
-        // 处理拖拽的文件
-        for (final item in event.session.items) {
-          final internalPath = galleryInternalDragPathFromLocalData(
-            item.localData,
-          );
-          if (internalPath != null) {
-            HapticFeedback.heavyImpact();
-            widget.onImageDrop?.call(internalPath, categoryId);
-            continue;
-          }
-
-          final reader = item.dataReader;
-          if (reader == null) continue;
-
-          // 读取文件 URI
-          if (reader.canProvide(Formats.fileUri)) {
-            final filePath = await _getFilePathFromUri(reader);
-            if (filePath != null) {
-              HapticFeedback.heavyImpact();
-              widget.onImageDrop?.call(filePath, categoryId);
-            }
-          }
-        }
+        await performGalleryDrop(
+          context,
+          event,
+          (paths) => widget.onImagesDrop!(paths, categoryId),
+        );
       },
       child: dragTarget,
     );
-  }
-
-  /// 从 DataReader 中提取文件路径
-  Future<String?> _getFilePathFromUri(DataReader reader) =>
-      galleryFilePathFromDataReader(reader);
-}
-
-/// 从拖放 [DataReader] 中提取文件路径（fileUri）。
-///
-/// 分类树与相簿树共用的系统级拖放辅助；读取失败或超时返回 null。
-Future<String?> galleryFilePathFromDataReader(DataReader reader) async {
-  final completer = Completer<String?>();
-
-  final progress = reader.getValue(
-    Formats.fileUri,
-    (uri) {
-      if (!completer.isCompleted) {
-        if (uri == null) {
-          completer.complete(null);
-          return;
-        }
-        try {
-          final filePath = uri.toFilePath();
-          completer.complete(filePath);
-        } catch (e) {
-          completer.complete(null);
-        }
-      }
-    },
-    onError: (e) {
-      if (!completer.isCompleted) {
-        completer.complete(null);
-      }
-    },
-  );
-
-  if (progress == null) {
-    return null;
-  }
-
-  // 添加超时保护
-  try {
-    return await completer.future.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => null,
-    );
-  } catch (e) {
-    return null;
   }
 }
 

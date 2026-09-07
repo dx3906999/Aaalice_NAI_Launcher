@@ -1,3 +1,5 @@
+import '../common/image_card_batch_scope.dart';
+import '../common/image_card_action.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -63,15 +65,6 @@ class LocalGalleryToolbar extends ConsumerStatefulWidget {
   /// 用于滚动到分组的 GroupedGridView key
   final GlobalKey? groupedGridViewKey;
 
-  /// Callbacks for bulk actions
-  /// 批量操作回调
-  final VoidCallback? onAddToAlbum;
-  final VoidCallback? onRemoveFromAlbum;
-  final VoidCallback? onDeleteSelected;
-  final VoidCallback? onPackSelected;
-  final VoidCallback? onEditMetadata;
-  final VoidCallback? onMoveToCategory;
-
   /// Whether category panel is visible
   /// 是否显示分类面板
   final bool showCategoryPanel;
@@ -86,6 +79,7 @@ class LocalGalleryToolbar extends ConsumerStatefulWidget {
 
   /// Controls whether the shared collection toolbar includes page identity.
   final bool showPageTitle;
+  final List<ImageCardAction> batchActions;
 
   const LocalGalleryToolbar({
     super.key,
@@ -99,12 +93,7 @@ class LocalGalleryToolbar extends ConsumerStatefulWidget {
     this.canUndo = false,
     this.canRedo = false,
     this.groupedGridViewKey,
-    this.onAddToAlbum,
-    this.onRemoveFromAlbum,
-    this.onDeleteSelected,
-    this.onPackSelected,
-    this.onEditMetadata,
-    this.onMoveToCategory,
+    this.batchActions = const [],
     this.showCategoryPanel = true,
     this.onToggleCategoryPanel,
     this.enableSearchAutocomplete = true,
@@ -183,9 +172,10 @@ class _LocalGalleryToolbarState extends ConsumerState<LocalGalleryToolbar> {
     // Show bulk action bar when in selection mode
     // 选择模式时显示批量操作栏
     if (selectionState.isActive) {
-      final currentPageImagePaths = state.currentImages
-          .map((r) => r.path)
-          .toList();
+      final currentPageImagePaths =
+          (state.isGroupedView ? state.groupedImages : state.currentImages)
+              .map((r) => r.path)
+              .toList();
       final isCurrentPageSelected =
           currentPageImagePaths.isNotEmpty &&
           currentPageImagePaths.every(
@@ -230,47 +220,7 @@ class _LocalGalleryToolbarState extends ConsumerState<LocalGalleryToolbar> {
         deselectAllLabel: l10n.localGallery_deselectCurrentPage,
         selectAllAvailableLabel: l10n.localGallery_selectAllResults,
         deselectAllAvailableLabel: l10n.localGallery_deselectAllResults,
-        actions: [
-          BulkActionItem(
-            icon: Icons.drive_file_move_outline,
-            label: l10n.localGallery_moveSelected,
-            onPressed: widget.onMoveToCategory,
-            color: theme.colorScheme.secondary,
-          ),
-          BulkActionItem(
-            icon: Icons.archive_outlined,
-            label: l10n.localGallery_packSelected,
-            onPressed: widget.onPackSelected,
-            color: theme.colorScheme.tertiary,
-          ),
-          BulkActionItem(
-            icon: Icons.edit_outlined,
-            label: l10n.localGallery_editMetadata,
-            onPressed: widget.onEditMetadata,
-            color: theme.colorScheme.primary,
-          ),
-          BulkActionItem(
-            icon: Icons.playlist_add,
-            label: l10n.localGallery_addToAlbum,
-            onPressed: widget.onAddToAlbum,
-            color: theme.colorScheme.secondary,
-          ),
-          if (widget.onRemoveFromAlbum != null)
-            BulkActionItem(
-              icon: Icons.playlist_remove,
-              label: l10n.localGallery_removeFromAlbum,
-              onPressed: widget.onRemoveFromAlbum,
-              color: theme.colorScheme.secondary,
-            ),
-          BulkActionItem(
-            icon: Icons.delete_outline,
-            label: l10n.common_delete,
-            onPressed: widget.onDeleteSelected,
-            color: theme.colorScheme.error,
-            isDanger: true,
-            showDividerBefore: true,
-          ),
-        ],
+        actions: imageCardBulkItems(context, actions: widget.batchActions),
       );
     }
 

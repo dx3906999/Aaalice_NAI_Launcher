@@ -6,12 +6,18 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../core/agent/resources/agent_chat_resource_drag_format.dart';
 import '../../../core/agent/resources/agent_chat_resource_reference.dart';
-import '../../../core/agent/resources/agent_chat_resource_reference_codec.dart';
 import '../../../core/utils/localization_extension.dart';
+import '../../../core/utils/app_logger.dart';
+import '../../../core/database/database_providers.dart';
 import '../../widgets/common/app_toast.dart';
 import '../providers/agent_chat_notifier.dart';
-import '../../widgets/common/context_menu_anchor.dart';
 import '../../widgets/common/image_card_actions.dart';
+import '../../widgets/common/card_drag_source.dart';
+import '../../selection/card_selection.dart';
+import '../../selection/card_selection_scope.dart';
+import '../../utils/card_resource_drag_factory.dart';
+import '../../utils/card_drag_format.dart';
+import '../../utils/gallery_drop_reader.dart';
 
 export '../../../core/agent/resources/agent_chat_resource_drag_format.dart';
 
@@ -38,37 +44,7 @@ Future<void> addAgentResourceToComposer({
   }
 }
 
-Future<void> showAddAgentResourceMenu({
-  required BuildContext context,
-  required WidgetRef ref,
-  required Offset position,
-  required AgentChatResourceReference reference,
-}) async {
-  final selected = await showMenu<bool>(
-    context: context,
-    position: contextMenuAnchorAt(context, position),
-    items: [
-      PopupMenuItem<bool>(
-        value: true,
-        child: Row(
-          children: [
-            const Icon(Icons.auto_awesome_outlined, size: 18),
-            const SizedBox(width: 8),
-            Text(context.l10n.agentChat_addResource),
-          ],
-        ),
-      ),
-    ],
-  );
-  if (selected != true || !context.mounted) return;
-  await addAgentResourceToComposer(
-    context: context,
-    ref: ref,
-    reference: reference,
-  );
-}
-
-class AgentResourceDropRegion extends StatelessWidget {
+class AgentResourceDropRegion extends ConsumerWidget {
   const AgentResourceDropRegion({
     super.key,
     required this.onDrop,
@@ -79,17 +55,71 @@ class AgentResourceDropRegion extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return DropRegion(
-      formats: [agentChatResourceDragFormat],
+      formats: [agentChatResourceDragFormat, cardDragFormat],
       onDropOver: (event) =>
-          event.session.items.any(canReadAgentResourceDropItem)
+          event.session.items.isNotEmpty &&
+              event.session.items.every(
+                (item) =>
+                    canReadAgentResourceDropItem(item) ||
+                    galleryInternalDragPathFromLocalData(item.localData) !=
+                        null,
+              )
           ? DropOperation.copy
           : DropOperation.none,
       onPerformDrop: (event) async {
-        for (final item in event.session.items) {
-          final reference = await readAgentResourceDropItem(item);
-          if (reference != null) await onDrop(reference);
+        final overlay = Overlay.maybeOf(context, rootOverlay: true);
+        final errorLabel = context.l10n.common_error;
+        final localPaths = event.session.items
+            .map((item) => galleryInternalDragPathFromLocalData(item.localData))
+            .toList();
+        final database = localPaths.any((path) => path != null)
+            ? ref.read(databaseManagerProvider.future)
+            : null;
+        try {
+          final decoded = await Future.wait(
+            event.session.items.map(readAgentResourceDropItem),
+          );
+          final references = <AgentChatResourceReference>[];
+          for (var index = 0; index < event.session.items.length; index++) {
+            var reference = decoded[index];
+            final path = localPaths[index];
+            if (reference == null && path != null) {
+              final source = (await database!).galleryDataSource;
+              final id = await source?.getImageIdByPath(path);
+              if (id != null) {
+                reference = AgentChatResourceReference(
+                  kind: AgentChatResourceKind.localGalleryImage,
+                  source: 'local_gallery',
+                  resourceId: id.toString(),
+                );
+              }
+            }
+            if (reference == null) {
+              throw StateError(
+                'Unsupported or unavailable Agent resource at ${index + 1}',
+              );
+            }
+            references.add(reference);
+          }
+          final result = await ImageCardBatchResult.execute(references, onDrop);
+          if (result.failures.isNotEmpty) {
+            for (final failure in result.failures.values) {
+              AppLogger.e(
+                'Agent resource drop failed',
+                failure.error,
+                failure.stackTrace,
+                'CardDrag',
+              );
+            }
+            throw StateError(
+              '${result.failures.length}/${references.length}: ${result.failures.values.map((failure) => failure.error).join('; ')}',
+            );
+          }
+        } catch (error, stack) {
+          AppLogger.e('Agent resource drop failed', error, stack, 'CardDrag');
+          AppToast.errorOnOverlay(overlay, '$errorLabel: $error');
         }
       },
       child: child,
@@ -102,52 +132,58 @@ class AgentResourceDragSource extends ConsumerWidget {
     super.key,
     required this.reference,
     required this.child,
-    this.enableAddToAgentMenu = true,
     this.enableAddToAgentAction = true,
+    this.selectionId,
+    this.referenceForSelection,
   });
 
   final AgentChatResourceReference reference;
   final Widget child;
-  final bool enableAddToAgentMenu;
   final bool enableAddToAgentAction;
+  final String? selectionId;
+  final AgentChatResourceReference Function(String id)? referenceForSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reference = this.reference;
-    final dragSource = DragItemWidget(
-      allowedOperations: () => [DropOperation.copy],
-      dragItemProvider: (_) async {
-        final item = DragItem(
-          suggestedName:
-              reference.display['name'] ?? reference.display['title'],
-          localData: AgentChatResourceReferenceCodec.encodeJson(reference),
-        );
-        addAgentResourceDragPayload(item, reference);
-        return item;
+    final factory = ref.watch(cardResourceDragFactoryProvider);
+    final selection = CardSelectionScope.maybeOf(context);
+    final currentId = selectionId ?? reference.resourceId;
+    final dragSource = CardDragSource(
+      resource: () => factory.create(reference, id: currentId),
+      snapshot: (source) {
+        final ids = selection == null
+            ? [currentId]
+            : CardSelection.targets(
+                selection.selection,
+                currentId,
+                selection.orderedIds,
+              );
+        return [
+          for (final id in ids)
+            if (id == currentId)
+              source
+            else
+              factory.create(
+                referenceForSelection?.call(id) ??
+                    AgentChatResourceReference(
+                      kind: reference.kind,
+                      source: reference.source,
+                      resourceId: id,
+                    ),
+                id: id,
+              ),
+        ];
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.deferToChild,
-        // 必须抬起后弹菜单：按住时 push 会合成 touch 取消事件，令 DraggableWidget 整批重建闪烁
-        onSecondaryTapUp: enableAddToAgentMenu
-            ? (details) => showAddAgentResourceMenu(
-                context: context,
-                ref: ref,
-                position: details.globalPosition,
-                reference: reference,
-              )
-            : null,
-        child: DraggableWidget(child: child),
-      ),
+      child: child,
     );
     if (!enableAddToAgentAction) return dragSource;
 
     return ImageCardActionScope(
-      onAddToAgent: () => unawaited(
-        addAgentResourceToComposer(
-          context: context,
-          ref: ref,
-          reference: reference,
-        ),
+      onAddToAgent: () => addAgentResourceToComposer(
+        context: context,
+        ref: ref,
+        reference: reference,
       ),
       child: dragSource,
     );

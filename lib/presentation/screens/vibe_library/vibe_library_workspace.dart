@@ -1,11 +1,11 @@
+import '../../widgets/common/image_card_batch_scope.dart';
+import '../../utils/card_drop_reader.dart';
 import 'package:flutter/material.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
-import '../../../core/constants/model_capabilities.dart';
 import '../../../data/models/vibe/vibe_import_progress.dart';
 import '../../../core/platform/platform_capabilities.dart';
 import '../../../core/utils/localization_extension.dart';
-import '../../../core/utils/novelai_vibe_codec.dart';
 import '../../adaptive/interaction_policy.dart';
 import '../../providers/selection_mode_provider.dart';
 import '../../providers/vibe_library_category_provider.dart';
@@ -38,7 +38,7 @@ class VibeLibraryWorkspace extends StatelessWidget {
   final SelectionModeState selectionState;
   final String currentModel;
   final VibeLibraryScreenController controller;
-  final ValueChanged<VibeLibraryCommand> onCommand;
+  final Future<void> Function(VibeLibraryCommand) onCommand;
 
   @override
   Widget build(BuildContext context) {
@@ -121,10 +121,13 @@ class VibeLibraryWorkspace extends StatelessWidget {
           return content;
         }
         return DropRegion(
-          formats: Formats.standardFormats,
+          formats: cardDropFormats,
           hitTestBehavior: HitTestBehavior.opaque,
           onDropOver: (event) {
-            if (!event.session.allowedOperations.contains(DropOperation.copy)) {
+            if (!event.session.allowedOperations.contains(DropOperation.copy) ||
+                !const CardDropPolicy(
+                  allowVibes: true,
+                ).accepts(event.session.items)) {
               return DropOperation.none;
             }
             controller.setDragging(true);
@@ -133,7 +136,7 @@ class VibeLibraryWorkspace extends StatelessWidget {
           onDropLeave: (_) => controller.setDragging(false),
           onPerformDrop: (event) async {
             controller.setDragging(false);
-            onCommand(PerformVibeDropCommand(event));
+            await onCommand(PerformVibeDropCommand(event));
           },
           child: content,
         );
@@ -174,7 +177,7 @@ class _CategoryPanel extends StatefulWidget {
 
   final VibeLibraryState libraryState;
   final VibeLibraryCategoryState categoryState;
-  final ValueChanged<VibeLibraryCommand> onCommand;
+  final Future<void> Function(VibeLibraryCommand) onCommand;
 
   @override
   State<_CategoryPanel> createState() => _CategoryPanelState();
@@ -256,7 +259,7 @@ class _Toolbar extends StatelessWidget {
   final bool showPageTitle;
   final bool showCategoryPanel;
   final bool usePersistentCategories;
-  final ValueChanged<VibeLibraryCommand> onCommand;
+  final Future<void> Function(VibeLibraryCommand) onCommand;
 
   @override
   Widget build(BuildContext context) {
@@ -382,59 +385,13 @@ class _Toolbar extends StatelessWidget {
     final ids = libraryState.currentEntries.map((entry) => entry.id).toList();
     final allSelected =
         ids.isNotEmpty && ids.every(selectionState.selectedIds.contains);
-    final canMark =
-        ModelCapabilityRegistry.of(currentModel).supportsVibeTransfer &&
-        NovelAiVibeCodec.normalizeModelOrNull(currentModel) != null;
-    final theme = Theme.of(context);
     return BulkActionBar(
       selectedCount: selectionState.selectedIds.length,
       isAllSelected: allSelected,
       onExit: () => onCommand(const ExitSelectionModeCommand()),
       onSelectAll: () =>
           onCommand(ToggleCurrentPageSelectionCommand(select: !allSelected)),
-      actions: [
-        BulkActionItem(
-          icon: Icons.send,
-          label: context.l10n.vibeLibrary_sendToGeneration,
-          color: theme.colorScheme.primary,
-          onPressed: () => onCommand(const SendSelectionToGenerationCommand()),
-        ),
-        BulkActionItem(
-          icon: Icons.drive_file_move_outline,
-          label: context.l10n.common_move,
-          color: theme.colorScheme.secondary,
-          onPressed: () => onCommand(const MoveSelectionCommand()),
-        ),
-        BulkActionItem(
-          icon: Icons.file_upload_outlined,
-          label: context.l10n.common_export,
-          color: theme.colorScheme.secondary,
-          onPressed: () => onCommand(const ExportSelectionCommand()),
-        ),
-        BulkActionItem(
-          icon: Icons.favorite_border,
-          label: context.l10n.common_favorite,
-          color: theme.colorScheme.primary,
-          onPressed: () => onCommand(const ToggleSelectionFavoriteCommand()),
-        ),
-        if (canMark)
-          BulkActionItem(
-            icon: Icons.model_training_outlined,
-            label: context.l10n.vibeLibrary_markEncodingModel,
-            color: theme.colorScheme.secondary,
-            onPressed: controller.isMarkingEncodingModel
-                ? null
-                : () => onCommand(const MarkSelectionEncodingModelCommand()),
-          ),
-        BulkActionItem(
-          icon: Icons.delete_forever_outlined,
-          label: context.l10n.common_delete,
-          color: theme.colorScheme.error,
-          isDanger: true,
-          showDividerBefore: true,
-          onPressed: () => onCommand(const DeleteSelectionCommand()),
-        ),
-      ],
+      actions: imageCardBulkItems(context),
     );
   }
 }
@@ -450,7 +407,7 @@ class _Body extends StatelessWidget {
   final VibeLibraryState state;
   final int columns;
   final double itemWidth;
-  final ValueChanged<VibeLibraryCommand> onCommand;
+  final Future<void> Function(VibeLibraryCommand) onCommand;
 
   @override
   Widget build(BuildContext context) {

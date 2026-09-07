@@ -534,6 +534,15 @@ class GenerationParamsNotifier extends _$GenerationParamsNotifier {
     }
   }
 
+  /// A multi-resource drop must fit as a whole before any group is applied.
+  void validateVibeReferenceBatch(List<VibeReference> incoming) {
+    _vibeReferences.mergeReferences(
+      state.vibeReferencesV4,
+      incoming,
+      requireAll: true,
+    );
+  }
+
   /// 移除 V4 Vibe 参考
   void removeVibeReference(int index) {
     if (index < 0 || index >= state.vibeReferencesV4.length) return;

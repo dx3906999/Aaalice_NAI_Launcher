@@ -16,6 +16,8 @@ import 'package:nai_launcher/data/models/gallery/local_image_record.dart';
 import 'package:nai_launcher/l10n/app_localizations.dart';
 import 'package:nai_launcher/presentation/providers/share_image_settings_provider.dart';
 import 'package:nai_launcher/presentation/widgets/common/draggable_memory_image.dart';
+import 'package:nai_launcher/presentation/widgets/common/card_drag_source.dart';
+import 'package:nai_launcher/presentation/utils/card_image_drag_factory.dart';
 import 'package:nai_launcher/presentation/widgets/gallery/draggable_image_card.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
@@ -160,8 +162,10 @@ void main() {
       dragWidget.dragItemProvider(
         DragItemRequest(location: Offset.zero, session: session),
       ),
-      throwsStateError,
+      completion(isNull),
     );
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
   });
 
   for (final entry in <String, Widget Function(LocalImageRecord, Uint8List)>{
@@ -201,17 +205,11 @@ void main() {
             child: entry.value(record, _validPreviewBytes),
           ),
         );
-        final session = _FakeDragSession();
-        addTearDown(session.dispose);
-        final dragWidget = tester.widget<DragItemWidget>(
-          find.byType(DragItemWidget),
-        );
-        await expectLater(
-          dragWidget.dragItemProvider(
-            DragItemRequest(location: Offset.zero, session: session),
-          ),
-          throwsStateError,
-        );
+        final resource = tester
+            .widget<CardDragSource>(find.byType(CardDragSource))
+            .resource();
+        expect(invoked, isFalse);
+        await expectLater(resource.prepare!(), throwsStateError);
         expect(invoked, isTrue);
       },
     );
@@ -254,7 +252,7 @@ void main() {
         await tester.pump();
       }
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(renders, 2);
+      expect(renders, 0);
       expect(paths.requests, 0);
       expect(tester.takeException(), isNull);
     });
@@ -282,73 +280,33 @@ void main() {
           child: entry.value(record, _validPreviewBytes),
         ),
       );
-      final session = _FakeDragSession();
-      addTearDown(session.dispose);
-      final drag = tester.widget<DragItemWidget>(find.byType(DragItemWidget));
-      final failures = <Object>[];
-      Future<void> request() async {
-        try {
-          await drag.dragItemProvider(
-            DragItemRequest(location: Offset.zero, session: session),
-          );
-        } catch (error) {
-          failures.add(error);
-        }
-      }
-
-      final first = request();
-      final second = request();
+      final resource = tester
+          .widget<CardDragSource>(find.byType(CardDragSource))
+          .resource();
+      final preparation = CardDragPreparation([resource]);
+      final first = expectLater(preparation.bytesAt(0), throwsStateError);
+      final second = expectLater(preparation.bytesAt(0), throwsStateError);
       await tester.pump();
       expect(calls, 1);
       pending.completeError(StateError('synthetic render failure'));
       await Future.wait([first, second]);
-      expect(failures, hasLength(2));
-      expect(failures, everyElement(isA<StateError>()));
-    });
-
-    testWidgets('${entry.key} fails closed for malformed protected bytes', (
-      tester,
-    ) async {
-      final directory = Directory.systemTemp.createTempSync(
-        'protected_gallery_drag_',
-      );
-      addTearDown(() {
-        if (directory.existsSync()) directory.deleteSync(recursive: true);
-      });
-      final source = File('${directory.path}${Platform.pathSeparator}bad.png')
-        ..writeAsBytesSync(const [1, 2, 3], flush: true);
-      final record = LocalImageRecord(
-        path: source.path,
-        size: 3,
-        modifiedAt: DateTime(2026),
-      );
-      final session = _FakeDragSession();
-      addTearDown(session.dispose);
-
-      await tester.pumpWidget(
-        _app(
-          settings: const ShareImageSettings(protectionMode: true),
-          child: entry.value(record, _validPreviewBytes),
-        ),
-      );
-      final dragWidget = tester.widget<DragItemWidget>(
-        find.byType(DragItemWidget),
-      );
-
-      Object? dragError;
-      await tester.runAsync(() async {
-        try {
-          await dragWidget.dragItemProvider(
-            DragItemRequest(location: Offset.zero, session: session),
-          );
-        } catch (error) {
-          dragError = error;
-        }
-      });
-      expect(dragError, isA<ImageSanitizeException>());
-      expect(_feedbackKey(tester), protectedDragFeedbackMarkerKey);
     });
   }
+  test(
+    'malformed original fails closed in the shared protected export factory',
+    () async {
+      final resource = imageCardDragResource(
+        id: 'bad',
+        fileName: 'bad.png',
+        stripMetadata: true,
+        bytes: Uint8List.fromList([1, 2, 3]),
+      );
+      await expectLater(
+        resource.prepare!(),
+        throwsA(isA<ImageSanitizeException>()),
+      );
+    },
+  );
 }
 
 Key? _feedbackKey(WidgetTester tester) {

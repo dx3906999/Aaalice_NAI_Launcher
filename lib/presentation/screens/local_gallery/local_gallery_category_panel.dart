@@ -27,7 +27,7 @@ class LocalGalleryCategoryPanel extends StatefulWidget {
     required this.onCategoryDelete,
     required this.onAddSubCategory,
     required this.onCategoryMove,
-    required this.onImageDrop,
+    required this.onImagesDrop,
     required this.onSyncWithFileSystem,
     required this.onCreateAlbum,
     required this.onAlbumSelected,
@@ -37,8 +37,8 @@ class LocalGalleryCategoryPanel extends StatefulWidget {
     required this.onAlbumMove,
     required this.onAlbumMoveToSlot,
     required this.onCategoryMoveToSlot,
-    required this.onImageDropToAlbum,
-    this.onImageFavoriteDrop,
+    required this.onImagesDropToAlbum,
+    this.onImagesFavoriteDrop,
     this.modal = false,
     this.scrollController,
     this.afterSelection,
@@ -56,7 +56,8 @@ class LocalGalleryCategoryPanel extends StatefulWidget {
   final Future<void> Function(String categoryId, String? newParentId)
   onCategoryMove;
 
-  final Future<void> Function(String imagePath, String? categoryId) onImageDrop;
+  final Future<void> Function(List<String> imagePaths, String? categoryId)
+  onImagesDrop;
   final Future<void> Function() onSyncWithFileSystem;
   final Future<void> Function(String? parentId) onCreateAlbum;
   final ValueChanged<String?> onAlbumSelected;
@@ -76,9 +77,9 @@ class LocalGalleryCategoryPanel extends StatefulWidget {
     GalleryTreeDropSlot slot,
   )
   onCategoryMoveToSlot;
-  final Future<void> Function(String imagePath, String albumId)
-  onImageDropToAlbum;
-  final Future<void> Function(String imagePath)? onImageFavoriteDrop;
+  final Future<void> Function(List<String> imagePaths, String albumId)
+  onImagesDropToAlbum;
+  final Future<void> Function(List<String> imagePaths)? onImagesFavoriteDrop;
   final bool modal;
   final ScrollController? scrollController;
   final VoidCallback? afterSelection;
@@ -148,8 +149,8 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
                       onAddAlbumRequest: widget.onAddAlbumRequest,
                       onAlbumMove: widget.onAlbumMove,
                       onAlbumMoveToSlot: widget.onAlbumMoveToSlot,
-                      onImageDrop: widget.onImageDropToAlbum,
-                      onImageFavoriteDrop: widget.onImageFavoriteDrop,
+                      onImagesDrop: widget.onImagesDropToAlbum,
+                      onImagesFavoriteDrop: widget.onImagesFavoriteDrop,
                       onCreateAlbumRequest: () => widget.onCreateAlbum(null),
                     ),
                   ),
@@ -183,7 +184,7 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
                     onAddSubCategory: widget.onAddSubCategory,
                     onCategoryMove: widget.onCategoryMove,
                     onCategoryMoveToSlot: widget.onCategoryMoveToSlot,
-                    onImageDrop: widget.onImageDrop,
+                    onImagesDrop: widget.onImagesDrop,
                     onSyncWithFileSystem: widget.onSyncWithFileSystem,
                   ),
               ],

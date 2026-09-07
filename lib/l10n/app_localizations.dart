@@ -101,6 +101,30 @@ abstract class AppLocalizations {
     Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
+  /// No description provided for @cardAction_singleScope.
+  ///
+  /// In en, this message translates to:
+  /// **'This item only'**
+  String get cardAction_singleScope;
+
+  /// No description provided for @cardDrag_preparingCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing {count} resources to drag…'**
+  String cardDrag_preparingCount(int count);
+
+  /// No description provided for @cardDrop_unsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This target does not support this resource set or item count. Use the matching resource import target.'**
+  String get cardDrop_unsupported;
+
+  /// No description provided for @cardAction_batchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{failed} of {total} items failed'**
+  String cardAction_batchFailed(int failed, int total);
+
   /// No description provided for @generation_enhancementFailed.
   ///
   /// In en, this message translates to:

@@ -13,6 +13,9 @@ import 'image_card_controller.dart';
 import 'image_card_generating.dart';
 import 'image_card_models.dart';
 import 'image_card_surface.dart';
+import 'image_card_action_region.dart';
+import 'image_card_batch_scope.dart';
+import '../../selection/card_selection_scope.dart';
 
 export 'image_card_actions.dart'
     show ImageClipboardWriter, imageClipboardWriterProvider;
@@ -45,6 +48,8 @@ class SelectableImageCard extends ConsumerStatefulWidget {
     this.dragPreparationReady = true,
     this.completionPreview,
     this.enableSelection = true,
+    this.selectionMode = false,
+    this.showSelectionOnHover = true,
     this.onUpscale,
     this.onReversePrompt,
     this.onImageToImage,
@@ -87,7 +92,7 @@ class SelectableImageCard extends ConsumerStatefulWidget {
   final VoidCallback? onDoubleTap;
   final VoidCallback? onLongPress;
   final ValueChanged<bool>? onSelectionChanged;
-  final VoidCallback? onFullscreen;
+  final ImageCardCallback? onFullscreen;
   final bool isPreviewActive;
   final Object? imageIdentity;
   final bool allowRepeatedModifierTaps;
@@ -103,24 +108,26 @@ class SelectableImageCard extends ConsumerStatefulWidget {
   final bool dragPreparationReady;
   final StreamPreviewFrame? completionPreview;
   final bool enableSelection;
-  final VoidCallback? onUpscale;
-  final VoidCallback? onReversePrompt;
-  final VoidCallback? onImageToImage;
-  final VoidCallback? onVibeTransfer;
-  final VoidCallback? onPreciseReference;
-  final VoidCallback? onSaveToPreciseRefLibrary;
-  final VoidCallback? onEditImage;
-  final VoidCallback? onInpaint;
-  final VoidCallback? onGenerateVariations;
-  final VoidCallback? onDirectorTools;
-  final VoidCallback? onEnhance;
-  final VoidCallback? onSendToKrita;
-  final VoidCallback? onShareToDiscord;
-  final VoidCallback? onOpenInExplorer;
+  final bool selectionMode;
+  final bool showSelectionOnHover;
+  final ImageCardCallback? onUpscale;
+  final ImageCardCallback? onReversePrompt;
+  final ImageCardCallback? onImageToImage;
+  final ImageCardCallback? onVibeTransfer;
+  final ImageCardCallback? onPreciseReference;
+  final ImageCardCallback? onSaveToPreciseRefLibrary;
+  final ImageCardCallback? onEditImage;
+  final ImageCardCallback? onInpaint;
+  final ImageCardCallback? onGenerateVariations;
+  final ImageCardCallback? onDirectorTools;
+  final ImageCardCallback? onEnhance;
+  final ImageCardCallback? onSendToKrita;
+  final ImageCardCallback? onShareToDiscord;
+  final ImageCardCallback? onOpenInExplorer;
   final String? sourceFilePath;
   final void Function(Uint8List imageBytes, String prompt)? onSaveToLibrary;
   final bool isFavorite;
-  final VoidCallback? onFavoriteToggle;
+  final ImageCardCallback? onFavoriteToggle;
   final Widget? underlay;
   final Widget? imageContent;
   final bool isGenerating;
@@ -178,7 +185,9 @@ class _SelectableImageCardState extends ConsumerState<SelectableImageCard>
     enableSaveAction: widget.enableSaveAction,
     enableCopyAction: widget.enableCopyAction,
     enableSelection: widget.enableSelection,
-    onTap: widget.onTap,
+    selectionMode: widget.selectionMode,
+    showSelectionOnHover: widget.showSelectionOnHover,
+    onTap: _handleTap,
     onDoubleTap: widget.onDoubleTap,
     onLongPress: widget.onLongPress,
     onSelectionChanged: widget.onSelectionChanged,
@@ -209,6 +218,16 @@ class _SelectableImageCardState extends ConsumerState<SelectableImageCard>
       data: _data,
       capabilities: _capabilities,
     );
+  }
+
+  void _handleTap() {
+    final identity = widget.imageIdentity;
+    if (widget.enableSelection &&
+        identity is String &&
+        CardSelectionScope.handleTap(context, identity)) {
+      return;
+    }
+    (widget.onTap ?? widget.onFullscreen)?.call();
   }
 
   @override
@@ -257,16 +276,30 @@ class _SelectableImageCardState extends ConsumerState<SelectableImageCard>
             onAddToAgent: ImageCardActionScope.maybeOf(context)?.onAddToAgent,
           )
         : const <ImageCardAction>[];
-    return ImageCardSurface(
-      data: data,
-      capabilities: capabilities,
-      controller: _controller,
+    return ImageCardActionRegion(
+      resourceId: widget.imageIdentity is String
+          ? widget.imageIdentity as String
+          : null,
       actions: actions,
-      onWarmShareCache: coordinator.warmShareTransferCache,
-      onShowContextMenu: (position) => ImageCardContextMenu.show(
-        context: context,
-        position: position,
-        actions: actions,
+      enabled: false,
+      builder: (context, boundActions) => ImageCardSurface(
+        data: data,
+        capabilities: capabilities,
+        controller: _controller,
+        actions: boundActions,
+        onWarmShareCache: coordinator.warmShareTransferCache,
+        onShowContextMenu: (position) {
+          final batch = ImageCardBatchScope.maybeOf(context);
+          final useBatch =
+              batch?.targetIds.contains(widget.imageIdentity) ?? false;
+          return ImageCardContextMenu.show(
+            context: context,
+            position: position,
+            actions: useBatch ? batch!.actions : boundActions,
+            title: useBatch ? batch!.title(context) : null,
+            listenable: useBatch ? batch!.runner : null,
+          );
+        },
       ),
     );
   }

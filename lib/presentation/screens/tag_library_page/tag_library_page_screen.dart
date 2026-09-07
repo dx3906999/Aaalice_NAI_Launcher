@@ -1,3 +1,4 @@
+import '../../selection/card_selection_scope.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,7 +18,6 @@ import '../../../core/utils/localization_extension.dart';
 import '../../../core/utils/sd_to_nai_converter.dart';
 import '../../../data/models/tag_library/tag_library_entry.dart';
 import '../../adaptive/adaptive_presenter.dart';
-import '../../adaptive/interaction_policy.dart';
 import '../../providers/fixed_tags_provider.dart';
 import '../../providers/pending_prompt_provider.dart';
 import '../../providers/tag_library_page_provider.dart';
@@ -26,6 +26,7 @@ import '../../router/app_routes.dart';
 
 import '../../agent_chat/widgets/agent_resource_drop_region.dart';
 import '../../widgets/common/app_toast.dart';
+import '../../widgets/common/library_classification_drag.dart';
 import '../../widgets/common/context_menu_anchor.dart';
 import '../../widgets/common/owned_scroll_controller.dart';
 import '../../widgets/common/themed_confirm_dialog.dart';
@@ -84,9 +85,8 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(tagLibraryPageNotifierProvider);
-    final isSelectionMode = ref.watch(
-      tagLibrarySelectionNotifierProvider.select((value) => value.isActive),
-    );
+    final selectionState = ref.watch(tagLibrarySelectionNotifierProvider);
+    final isSelectionMode = selectionState.isActive;
 
     // 定义快捷键映射
     final shortcuts = <String, VoidCallback>{
@@ -151,48 +151,57 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
       },
     };
 
-    return PopScope<void>(
-      canPop: !isSelectionMode,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && isSelectionMode) {
-          ref.read(tagLibrarySelectionNotifierProvider.notifier).exit();
-        }
-      },
-      child: PageShortcuts(
-        contextType: ShortcutContext.tagLibrary,
-        shortcuts: shortcuts,
-        child: Scaffold(
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final persistentCategories = constraints.maxWidth >= 840;
-              final showSidebar = persistentCategories && _showCategoryPanel;
-              return GalleryCollectionWorkspace(
-                toolbar: TagLibraryToolbar(
-                  showPageTitle: true,
-                  showCategoryPanel: showSidebar,
-                  onShowCategories: persistentCategories
-                      ? () => setState(
-                          () => _showCategoryPanel = !_showCategoryPanel,
-                        )
-                      : () => _showCategoryPanelSheet(state),
-                  onOpenFolder: PlatformCapabilities.current.supportsOpenFolder
-                      ? _openLibraryFolder
-                      : null,
-                  onEnterSelectionMode: () => ref
-                      .read(tagLibrarySelectionNotifierProvider.notifier)
-                      .enter(),
-                  onBulkDelete: _handleBulkDelete,
-                  onBulkMoveCategory: _handleBulkMoveCategory,
-                  onBulkToggleFavorite: _handleBulkToggleFavorite,
-                  onBulkCopy: _handleBulkCopy,
-                  onImport: _handleImport,
-                  onExport: _handleExport,
-                  onAddEntry: _showAddEntryDialog,
-                ),
-                sidebar: showSidebar ? _buildCategorySidebar(state) : null,
-                body: _buildContent(theme, state, isSelectionMode),
-              );
-            },
+    return CardSelectionScope(
+      selection: selectionState,
+      commands: ref.read(tagLibrarySelectionNotifierProvider.notifier),
+      orderedIds: state.filteredEntries.map((entry) => entry.id).toList(),
+      child: CardSelectionShortcuts(
+        child: PopScope<void>(
+          canPop: !isSelectionMode,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && isSelectionMode) {
+              ref.read(tagLibrarySelectionNotifierProvider.notifier).exit();
+            }
+          },
+          child: PageShortcuts(
+            contextType: ShortcutContext.tagLibrary,
+            shortcuts: shortcuts,
+            child: Scaffold(
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final persistentCategories = constraints.maxWidth >= 840;
+                  final showSidebar =
+                      persistentCategories && _showCategoryPanel;
+                  return GalleryCollectionWorkspace(
+                    toolbar: TagLibraryToolbar(
+                      showPageTitle: true,
+                      showCategoryPanel: showSidebar,
+                      onShowCategories: persistentCategories
+                          ? () => setState(
+                              () => _showCategoryPanel = !_showCategoryPanel,
+                            )
+                          : () => _showCategoryPanelSheet(state),
+                      onOpenFolder:
+                          PlatformCapabilities.current.supportsOpenFolder
+                          ? _openLibraryFolder
+                          : null,
+                      onEnterSelectionMode: () => ref
+                          .read(tagLibrarySelectionNotifierProvider.notifier)
+                          .enter(),
+                      onBulkDelete: _handleBulkDelete,
+                      onBulkMoveCategory: _handleBulkMoveCategory,
+                      onBulkToggleFavorite: _handleBulkToggleFavorite,
+                      onBulkCopy: _handleBulkCopy,
+                      onImport: _handleImport,
+                      onExport: _handleExport,
+                      onAddEntry: _showAddEntryDialog,
+                    ),
+                    sidebar: showSidebar ? _buildCategorySidebar(state) : null,
+                    body: _buildContent(theme, state, isSelectionMode),
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
@@ -280,29 +289,18 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
         details.globalPosition,
         initialCategoryId: null,
       ),
-      child: DragTarget<TagLibraryEntry>(
-        onWillAcceptWithDetails: (details) => details.data.categoryId != null,
-        onAcceptWithDetails: (details) {
-          HapticFeedback.heavyImpact();
-          ref
-              .read(tagLibraryPageNotifierProvider.notifier)
-              .moveEntryToCategory(details.data.id, null);
-          AppToast.success(context, context.l10n.tagLibrary_entryMoved);
-        },
-        builder: (context, candidateData, _) => AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: candidateData.isEmpty
-                ? null
-                : Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.32),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: allEntriesItem,
-        ),
+      child: LibraryClassificationDropTarget<TagLibraryEntry>(
+        kind: AgentChatResourceKind.tagLibraryEntry,
+        resolve: (id) => ref
+            .read(tagLibraryPageNotifierProvider)
+            .entries
+            .where((entry) => entry.id == id)
+            .firstOrNull,
+        needsChange: (entry) => entry.categoryId != null,
+        onAccept: (entry) => ref
+            .read(tagLibraryPageNotifierProvider.notifier)
+            .moveEntryToCategory(entry.id, null),
+        child: allEntriesItem,
       ),
     );
 
@@ -359,21 +357,22 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
                         .read(tagLibraryPageNotifierProvider.notifier)
                         .reorderCategories(parentId, oldIndex, newIndex);
                   },
-                  onEntryDrop: (entryId, categoryId) {
-                    ref
+                  onEntryDrop: (entryId, categoryId) async {
+                    await ref
                         .read(tagLibraryPageNotifierProvider.notifier)
                         .moveEntryToCategory(entryId, categoryId);
+                    if (!context.mounted) return;
                     AppToast.success(
                       context,
                       context.l10n.tagLibrary_entryMoved,
                     );
                   },
-                  onEntryFavoriteDrop: (entryId) {
+                  onEntryFavoriteDrop: (entryId) async {
                     final index = state.entries.indexWhere(
                       (candidate) => candidate.id == entryId,
                     );
                     if (index >= 0 && !state.entries[index].isFavorite) {
-                      ref
+                      await ref
                           .read(tagLibraryPageNotifierProvider.notifier)
                           .toggleFavorite(entryId);
                     }
@@ -448,9 +447,8 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
       TagLibraryViewMode.list => _buildListView(theme, entries),
       TagLibraryViewMode.grouped => GroupedEntriesView(
         scrollController: _groupedScrollController,
-        onEdit: _showEditDialog,
-        onDelete: _showDeleteEntryConfirmationForEntry,
-        onSend: _showEntryDetail,
+        entryBuilder: (entry) =>
+            _buildEntryItem(entry, true, showCategory: false),
       ),
     };
 
@@ -552,7 +550,11 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
   }
 
   /// 构建条目组件（卡片或列表项）
-  Widget _buildEntryItem(TagLibraryEntry entry, bool isCard) {
+  Widget _buildEntryItem(
+    TagLibraryEntry entry,
+    bool isCard, {
+    bool showCategory = true,
+  }) {
     final state = ref.read(tagLibraryPageNotifierProvider);
     final selectionState = ref.watch(tagLibrarySelectionNotifierProvider);
     final allIds = state.filteredEntries.map((e) => e.id).toList();
@@ -571,7 +573,6 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
     }
 
     final commonProps = (
-      enableDrag: !selectionState.isActive,
       isSelectionMode: selectionState.isActive,
       isSelected: isSelected,
       onToggleSelection: toggleSelection,
@@ -588,8 +589,7 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
         EntryCard(
           key: ValueKey(entry.id),
           entry: entry,
-          categoryName: categoryName,
-          enableDrag: commonProps.enableDrag,
+          categoryName: showCategory ? categoryName : null,
           isSelectionMode: commonProps.isSelectionMode,
           isSelected: commonProps.isSelected,
           onToggleSelection: commonProps.onToggleSelection,
@@ -608,8 +608,7 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
       EntryListItem(
         key: ValueKey(entry.id),
         entry: entry,
-        categoryName: categoryName,
-        enableDrag: commonProps.enableDrag,
+        categoryName: showCategory ? categoryName : null,
         isSelectionMode: commonProps.isSelectionMode,
         isSelected: commonProps.isSelected,
         onToggleSelection: commonProps.onToggleSelection,
@@ -623,9 +622,6 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
   }
 
   Widget _agentResourceDrag(TagLibraryEntry entry, Widget child) {
-    // Native drag owns the long-press gesture; touch layouts reserve long press
-    // for entering the library's selection mode.
-    if (context.interactionPolicy.shouldExposeTouchAlternatives) return child;
     return AgentResourceDragSource(
       reference: AgentChatResourceReference(
         kind: AgentChatResourceKind.tagLibraryEntry,

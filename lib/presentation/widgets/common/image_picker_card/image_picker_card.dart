@@ -9,7 +9,8 @@ import '../../../../core/platform/platform_capabilities.dart';
 import '_internal/loading_overlay.dart';
 import '_internal/picker_handler.dart';
 import '_internal/preview_thumbnail.dart';
-import '../../../utils/dropped_file_reader.dart';
+import '../../../utils/card_drop_reader.dart';
+import '../app_toast.dart';
 import 'image_picker_result.dart';
 import 'image_picker_type.dart';
 
@@ -411,10 +412,13 @@ class _ImagePickerCardState extends State<ImagePickerCard> {
   /// 包装拖拽支持
   Widget _wrapWithDropRegion(Widget child) {
     return DropRegion(
-      formats: Formats.standardFormats,
+      formats: cardDropFormats,
       hitTestBehavior: HitTestBehavior.opaque,
       onDropOver: (event) {
-        if (event.session.allowedOperations.contains(DropOperation.copy)) {
+        if (event.session.allowedOperations.contains(DropOperation.copy) &&
+            CardDropPolicy(
+              allowMultiple: widget.allowMultiple,
+            ).accepts(event.session.items)) {
           if (!_isDragOver) {
             setState(() => _isDragOver = true);
           }
@@ -429,9 +433,7 @@ class _ImagePickerCardState extends State<ImagePickerCard> {
       },
       onPerformDrop: (event) async {
         setState(() => _isDragOver = false);
-        // 重要：不要等待 _handleDrop 完成，让拖放回调立即返回
-        unawaited(_handleDrop(event));
-        return;
+        await _handleDrop(event);
       },
       child: child,
     );
@@ -440,29 +442,41 @@ class _ImagePickerCardState extends State<ImagePickerCard> {
   /// 处理拖拽放置
   Future<void> _handleDrop(PerformDropEvent event) async {
     final l10n = context.l10n;
-    var handledAny = false;
-    for (final item in event.session.items) {
-      final reader = item.dataReader;
-      if (reader == null) continue;
-
-      try {
-        final file = await DroppedFileReader.read(
-          reader,
-          logTag: 'ImagePickerDrop',
-        );
-        if (file != null && mounted) {
-          handledAny = true;
-          _handleFileResult(file.bytes, file.fileName, file.sourcePath);
-          if (!widget.allowMultiple) {
-            return;
+    try {
+      final resources = await readCardDrop(
+        context,
+        event.session.items,
+        policy: CardDropPolicy(allowMultiple: widget.allowMultiple),
+      );
+      final files = resources.map((resource) => resource.image).toList();
+      // Release the native read session before a selection callback opens UI.
+      unawaited(
+        Future<void>(() {
+          if (!mounted) return;
+          if (widget.allowMultiple && widget.onMultipleSelected != null) {
+            widget.onMultipleSelected!([
+              for (final file in files)
+                ImagePickerResult(
+                  bytes: file.bytes,
+                  fileName: file.fileName,
+                  path: file.sourcePath,
+                ),
+            ]);
+          } else {
+            for (final file in files) {
+              _handleFileResult(file.bytes, file.fileName, file.sourcePath);
+            }
           }
-        }
-      } catch (e) {
-        widget.onError?.call(l10n.imagePicker_dropReadFailed(e.toString()));
+        }),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = l10n.imagePicker_dropReadFailed('$error');
+      if (widget.onError != null) {
+        widget.onError!(message);
+      } else {
+        AppToast.error(context, message);
       }
-    }
-    if (!handledAny) {
-      widget.onError?.call(l10n.imagePicker_dropNoReadableImage);
     }
   }
 

@@ -1,3 +1,4 @@
+import '../../../selection/card_selection_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../../../widgets/common/image_viewport_surface.dart';
@@ -7,7 +8,6 @@ import '../../../../core/utils/localization_extension.dart';
 import '../../../../data/models/tag_library/tag_library_entry.dart';
 import '../../../adaptive/interaction_policy.dart';
 import '../../../widgets/common/app_toast.dart';
-import '../../../widgets/common/library_classification_drag.dart';
 import '../../../widgets/common/library_card_badges.dart';
 import '../../../widgets/common/thumbnail_display.dart';
 import '../../../widgets/tag_library/tag_library_entry_hover_preview.dart';
@@ -31,9 +31,6 @@ class EntryCard extends StatefulWidget {
   /// 所属分类名称
   final String? categoryName;
 
-  /// 是否启用拖拽到分类功能
-  final bool enableDrag;
-
   // ===== 批量选择相关属性 =====
   /// 是否处于选择模式
   final bool isSelectionMode;
@@ -54,7 +51,6 @@ class EntryCard extends StatefulWidget {
     this.onSend,
     this.onClassify,
     this.categoryName,
-    this.enableDrag = false,
     this.isSelectionMode = false,
     this.isSelected = false,
     this.onToggleSelection,
@@ -66,10 +62,9 @@ class EntryCard extends StatefulWidget {
 
 class _EntryCardState extends State<EntryCard> {
   bool _isHovering = false;
-  bool _isDragging = false;
 
   void _onEnter() {
-    if (!_isDragging && !widget.isSelectionMode) {
+    if (!widget.isSelectionMode) {
       setState(() => _isHovering = true);
     }
   }
@@ -88,7 +83,11 @@ class _EntryCardState extends State<EntryCard> {
 
     // 构建卡片主体内容（在GestureDetector内）
     final cardBody = GestureDetector(
-      onTap: widget.isSelectionMode ? widget.onToggleSelection : widget.onTap,
+      onTap: () {
+        if (CardSelectionScope.handleTap(context, entry.id)) return;
+        (widget.isSelectionMode ? widget.onToggleSelection : widget.onTap)
+            ?.call();
+      },
       onLongPress: widget.isSelectionMode
           ? null
           : () {
@@ -218,25 +217,11 @@ class _EntryCardState extends State<EntryCard> {
     );
     final cardContent = TagLibraryEntryHoverPreview(
       entry: entry,
-      enabled: !widget.isSelectionMode && !_isDragging,
+      enabled: !widget.isSelectionMode,
       child: cardVisual,
     );
 
-    return LibraryClassificationDragSource<TagLibraryEntry>(
-      data: entry,
-      label: entry.displayName,
-      enabled: widget.enableDrag,
-      onDragStarted: () {
-        setState(() {
-          _isDragging = true;
-          _isHovering = false;
-        });
-      },
-      onDragEnded: () {
-        if (mounted) setState(() => _isDragging = false);
-      },
-      child: cardContent,
-    );
+    return cardContent;
   }
 
   /// 构建背景图片

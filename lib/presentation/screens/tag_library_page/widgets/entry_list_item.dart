@@ -1,3 +1,4 @@
+import '../../../selection/card_selection_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,7 +6,6 @@ import '../../../../core/utils/localization_extension.dart';
 import '../../../../data/models/tag_library/tag_library_entry.dart';
 import '../../../adaptive/interaction_policy.dart';
 import '../../../widgets/common/app_toast.dart';
-import '../../../widgets/common/library_classification_drag.dart';
 import '../../../widgets/common/library_card_badges.dart';
 import '../../../widgets/common/thumbnail_display.dart';
 import '../../../widgets/common/translated_tag_text.dart';
@@ -23,9 +23,6 @@ class EntryListItem extends StatefulWidget {
 
   /// 所属分类名称
   final String? categoryName;
-
-  /// 是否启用拖拽到分类功能
-  final bool enableDrag;
 
   // ===== 批量选择相关属性 =====
   /// 是否处于选择模式
@@ -46,7 +43,6 @@ class EntryListItem extends StatefulWidget {
     this.onEdit,
     this.onClassify,
     this.categoryName,
-    this.enableDrag = false,
     this.isSelectionMode = false,
     this.isSelected = false,
     this.onToggleSelection,
@@ -60,7 +56,6 @@ class _EntryListItemState extends State<EntryListItem> {
   static const double _desktopActionsWidth = 132;
 
   bool _isHovering = false;
-  bool _isDragging = false;
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +75,7 @@ class _EntryListItemState extends State<EntryListItem> {
 
     final itemContent = MouseRegion(
       onEnter: (_) {
-        if (!_isDragging && !widget.isSelectionMode) {
+        if (!widget.isSelectionMode) {
           setState(() => _isHovering = true);
         }
       },
@@ -88,7 +83,11 @@ class _EntryListItemState extends State<EntryListItem> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         // 选择模式下点击切换选择，否则打开详情
-        onTap: widget.isSelectionMode ? widget.onToggleSelection : widget.onTap,
+        onTap: () {
+          if (CardSelectionScope.handleTap(context, entry.id)) return;
+          (widget.isSelectionMode ? widget.onToggleSelection : widget.onTap)
+              ?.call();
+        },
         // 长按进入选择模式并选中
         onLongPress: widget.isSelectionMode
             ? null
@@ -171,21 +170,7 @@ class _EntryListItemState extends State<EntryListItem> {
       ),
     );
 
-    return LibraryClassificationDragSource<TagLibraryEntry>(
-      data: entry,
-      label: entry.displayName,
-      enabled: widget.enableDrag,
-      onDragStarted: () {
-        setState(() {
-          _isDragging = true;
-          _isHovering = false;
-        });
-      },
-      onDragEnded: () {
-        if (mounted) setState(() => _isDragging = false);
-      },
-      child: itemContent,
-    );
+    return itemContent;
   }
 
   Widget _buildThumbnail(ThemeData theme, TagLibraryEntry entry) {

@@ -219,14 +219,22 @@ void main() {
     await _observeTouch(tester);
 
     expect(find.byTooltip('More actions'), findsOneWidget);
-    expect(find.byType(CardActionButtons), findsNothing);
+    expect(find.byTooltip('Copy Prompt'), findsNothing);
     await tester.tap(find.byTooltip('More actions'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Favorite'), findsOneWidget);
     expect(find.text('Copy Prompt'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Delete'),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('Delete'), findsOneWidget);
-
+    await tester.scrollUntilVisible(
+      find.text('Favorite'),
+      -120,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.text('Favorite'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

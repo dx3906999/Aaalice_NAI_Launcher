@@ -56,6 +56,7 @@ class DroppedFileReader {
   static Future<DroppedFileData?> read(
     DataReader reader, {
     bool allowVibeFiles = false,
+    bool allowPreciseReferenceFiles = false,
     bool allowRemoteImages = true,
     String logTag = 'DroppedFileReader',
   }) async {
@@ -64,6 +65,7 @@ class DroppedFileReader {
     final localFile = await _readLocalFile(
       reader,
       allowVibeFiles: allowVibeFiles,
+      allowPreciseReferenceFiles: allowPreciseReferenceFiles,
       logTag: logTag,
     );
     if (localFile != null) {
@@ -237,6 +239,7 @@ class DroppedFileReader {
   static Future<DroppedFileData?> _readLocalFile(
     DataReader reader, {
     required bool allowVibeFiles,
+    required bool allowPreciseReferenceFiles,
     required String logTag,
   }) async {
     if (!reader.canProvide(Formats.fileUri)) {
@@ -258,7 +261,11 @@ class DroppedFileReader {
       final fileName = _sanitizeFileName(
         filePath.split(Platform.pathSeparator).last,
       );
-      if (!_isAllowedLocalFile(fileName, allowVibeFiles: allowVibeFiles)) {
+      if (!_isAllowedLocalFile(
+        fileName,
+        allowVibeFiles: allowVibeFiles,
+        allowPreciseReferenceFiles: allowPreciseReferenceFiles,
+      )) {
         AppLogger.w('Unsupported dropped local file: $fileName', logTag);
         return null;
       }
@@ -287,12 +294,15 @@ class DroppedFileReader {
   static bool _isAllowedLocalFile(
     String fileName, {
     required bool allowVibeFiles,
+    required bool allowPreciseReferenceFiles,
   }) {
     final extension = _extensionOf(fileName);
     if (_imageExtensions.contains(extension)) {
       return true;
     }
-    return allowVibeFiles && VibeFileParser.isSupportedFile(fileName);
+    return (allowPreciseReferenceFiles &&
+            fileName.toLowerCase().endsWith('.naipreciseref')) ||
+        (allowVibeFiles && VibeFileParser.isSupportedFile(fileName));
   }
 
   static Future<DroppedFileData?> _readDirectImageFile(

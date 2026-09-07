@@ -27,6 +27,8 @@ import '../../screens/watermark/watermark_editor_launcher.dart';
 import '../../utils/clipboard_image.dart';
 import 'app_toast.dart';
 import 'image_card_controller.dart';
+import 'image_card_action.dart';
+export 'image_card_action.dart';
 import 'image_card_models.dart';
 
 typedef ImageClipboardWriter = Future<void> Function(Uint8List bytes);
@@ -35,56 +37,6 @@ final imageClipboardWriterProvider = Provider<ImageClipboardWriter>(
   (ref) => writeImageBytesToClipboardAsPng,
 );
 
-enum ImageCardActionId {
-  viewDetail,
-  save,
-  copy,
-  addToAgent,
-  shareDiscord,
-  createWatermark,
-  createMosaic,
-  saveToLibrary,
-  openFolder,
-  reversePrompt,
-  imageToImage,
-  vibeTransfer,
-  preciseReference,
-  saveToPreciseRefLibrary,
-  editImage,
-  inpaint,
-  generateVariations,
-  directorTools,
-  enhance,
-  dlssEnhance,
-  upscale,
-  sendToKrita,
-}
-
-@immutable
-class ImageCardAction {
-  const ImageCardAction({
-    required this.id,
-    required this.icon,
-    required this.label,
-    required this.menuLabel,
-    required this.invoke,
-    required this.group,
-    required this.showOnHover,
-    this.isPrimary = false,
-    this.isDanger = false,
-  });
-
-  final ImageCardActionId id;
-  final IconData icon;
-  final String label;
-  final String menuLabel;
-  final VoidCallback invoke;
-  final int group;
-  final bool showOnHover;
-  final bool isPrimary;
-  final bool isDanger;
-}
-
 class ImageCardActionScope extends InheritedWidget {
   const ImageCardActionScope({
     super.key,
@@ -92,7 +44,7 @@ class ImageCardActionScope extends InheritedWidget {
     required super.child,
   });
 
-  final VoidCallback onAddToAgent;
+  final ImageCardCallback onAddToAgent;
 
   static ImageCardActionScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ImageCardActionScope>();
@@ -110,7 +62,7 @@ class ImageCardActionCatalog {
     required ImageCardViewData data,
     required ImageCardCapabilities capabilities,
     required ImageCardActionCoordinator coordinator,
-    VoidCallback? onAddToAgent,
+    ImageCardCallback? onAddToAgent,
   }) {
     final l10n = AppLocalizations.of(context);
     if (l10n == null) return const <ImageCardAction>[];
@@ -119,8 +71,7 @@ class ImageCardActionCatalog {
       ImageCardActionId id,
       IconData icon,
       String label,
-      VoidCallback? callback, {
-      required int group,
+      ImageCardCallback? callback, {
       bool hover = true,
       bool primary = false,
       bool danger = false,
@@ -134,7 +85,6 @@ class ImageCardActionCatalog {
           label: label,
           menuLabel: menuLabel ?? label,
           invoke: callback,
-          group: group,
           showOnHover: hover,
           isPrimary: primary,
           isDanger: danger,
@@ -147,16 +97,24 @@ class ImageCardActionCatalog {
       Icons.open_in_full,
       l10n.image_viewDetail,
       capabilities.onFullscreen,
-      group: 0,
       hover: false,
     );
+    if (capabilities.enableSelection &&
+        capabilities.onSelectionChanged != null) {
+      add(
+        ImageCardActionId.select,
+        Icons.check_circle_outline,
+        l10n.common_multiSelect,
+        () => capabilities.onSelectionChanged!(true),
+        hover: false,
+      );
+    }
     if (capabilities.enableSaveAction) {
       add(
         ImageCardActionId.save,
         Icons.save_alt_rounded,
         l10n.image_save,
         coordinator.saveImage,
-        group: 1,
         primary: true,
         menuLabel: l10n.shortcut_action_save_image,
       );
@@ -167,7 +125,6 @@ class ImageCardActionCatalog {
         Icons.copy_rounded,
         l10n.image_copy,
         coordinator.createCopyImageAction(),
-        group: 1,
         menuLabel: l10n.shortcut_action_copy_image,
       );
     }
@@ -176,14 +133,12 @@ class ImageCardActionCatalog {
       Icons.smart_toy_outlined,
       l10n.agentChat_addResource,
       onAddToAgent,
-      group: 1,
     );
     add(
       ImageCardActionId.shareDiscord,
       Icons.send_rounded,
       l10n.discordShare_action,
       capabilities.onShareToDiscord,
-      group: 1,
       hover: false,
     );
     if (coordinator.watermarkEnabled &&
@@ -196,7 +151,6 @@ class ImageCardActionCatalog {
             ? l10n.watermark_actionRegenerate
             : l10n.watermark_actionCreate,
         coordinator.openWatermarkEditor,
-        group: 1,
       );
     }
     if (coordinator.mosaicEnabled &&
@@ -209,7 +163,6 @@ class ImageCardActionCatalog {
             ? l10n.mosaic_actionRegenerate
             : l10n.mosaic_actionCreate,
         coordinator.openMosaicEditor,
-        group: 1,
       );
     }
     add(
@@ -217,14 +170,12 @@ class ImageCardActionCatalog {
       Icons.bookmark_add_rounded,
       l10n.image_saveToLibrary,
       capabilities.onSaveToLibrary == null ? null : coordinator.saveToLibrary,
-      group: 1,
     );
     add(
       ImageCardActionId.openFolder,
       Icons.folder_open,
       l10n.shortcut_action_open_folder,
       capabilities.onOpenInExplorer,
-      group: 2,
       hover: false,
     );
     add(
@@ -232,70 +183,60 @@ class ImageCardActionCatalog {
       Icons.manage_search_rounded,
       l10n.drop_reversePrompt,
       capabilities.onReversePrompt,
-      group: 3,
     );
     add(
       ImageCardActionId.imageToImage,
       Icons.image_outlined,
       l10n.drop_img2img,
       capabilities.onImageToImage,
-      group: 3,
     );
     add(
       ImageCardActionId.vibeTransfer,
       Icons.palette_outlined,
       l10n.drop_vibeTransfer,
       capabilities.onVibeTransfer,
-      group: 3,
     );
     add(
       ImageCardActionId.preciseReference,
       Icons.center_focus_strong,
       l10n.drop_characterReference,
       capabilities.onPreciseReference,
-      group: 3,
     );
     add(
       ImageCardActionId.saveToPreciseRefLibrary,
       Icons.bookmark_add_outlined,
       l10n.drop_saveToPreciseRefLibrary,
       capabilities.onSaveToPreciseRefLibrary,
-      group: 3,
     );
     add(
       ImageCardActionId.editImage,
       Icons.edit_outlined,
       l10n.img2img_editImage,
       capabilities.onEditImage,
-      group: 4,
     );
     add(
       ImageCardActionId.inpaint,
       Icons.draw_outlined,
       l10n.img2img_inpaint,
       capabilities.onInpaint,
-      group: 4,
     );
     add(
       ImageCardActionId.generateVariations,
       Icons.auto_awesome_motion_outlined,
       l10n.img2img_generateVariations,
       capabilities.onGenerateVariations,
-      group: 4,
     );
     add(
       ImageCardActionId.directorTools,
       Icons.auto_fix_high_outlined,
       l10n.img2img_directorTools,
       capabilities.onDirectorTools,
-      group: 4,
     );
     add(
       ImageCardActionId.enhance,
       Icons.auto_awesome_outlined,
       l10n.img2img_enhance,
       capabilities.onEnhance,
-      group: 4,
     );
     if (capabilities.enableSaveAction &&
         PlatformCapabilities.current.supportsDlssEnhancement &&
@@ -305,7 +246,6 @@ class ImageCardActionCatalog {
         Icons.tonality_outlined,
         l10n.dlss_menu,
         coordinator.openDlss,
-        group: 4,
       );
     }
     add(
@@ -313,14 +253,19 @@ class ImageCardActionCatalog {
       Icons.zoom_out_map_rounded,
       l10n.image_upscale,
       capabilities.onUpscale,
-      group: 4,
     );
     add(
       ImageCardActionId.sendToKrita,
       Icons.brush_outlined,
       l10n.gallery_sendToKritaAction,
       capabilities.onSendToKrita,
-      group: 4,
+    );
+    add(
+      ImageCardActionId.favorite,
+      data.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      data.isFavorite ? l10n.common_unfavorite : l10n.common_favorite,
+      capabilities.onFavoriteToggle,
+      hover: false,
     );
     return actions;
   }
@@ -472,7 +417,7 @@ class ImageCardActionCoordinator {
     }
   }
 
-  VoidCallback createCopyImageAction() {
+  ImageCardCallback createCopyImageAction() {
     final l10n = context.l10n;
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     final stripMetadata = ref
@@ -481,15 +426,13 @@ class ImageCardActionCoordinator {
     final clipboardWriter = ref.read(imageClipboardWriterProvider);
     final transform = ref.read(copyDragWatermarkProvider);
     final cache = controller.shareTransferCache;
-    return () => unawaited(
-      _copyPreparedImage(
-        cache: cache,
-        stripMetadata: stripMetadata,
-        transform: transform,
-        clipboardWriter: clipboardWriter,
-        overlay: overlay,
-        l10n: l10n,
-      ),
+    return () => _copyPreparedImage(
+      cache: cache,
+      stripMetadata: stripMetadata,
+      transform: transform,
+      clipboardWriter: clipboardWriter,
+      overlay: overlay,
+      l10n: l10n,
     );
   }
 

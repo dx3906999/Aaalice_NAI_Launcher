@@ -34,8 +34,9 @@ class CategoryTreeView extends StatefulWidget {
   onCategoryReorder;
 
   /// 词条拖拽到分类
-  final void Function(String entryId, String? categoryId)? onEntryDrop;
-  final ValueChanged<String>? onEntryFavoriteDrop;
+  final FutureOr<void> Function(String entryId, String? categoryId)?
+  onEntryDrop;
+  final FutureOr<void> Function(String)? onEntryFavoriteDrop;
   final bool includeAllEntries;
 
   const CategoryTreeView({
@@ -124,8 +125,11 @@ class _CategoryTreeViewState extends State<CategoryTreeView> {
             ),
 
           LibraryClassificationDropTarget<TagLibraryEntry>(
+            kind: AgentChatResourceKind.tagLibraryEntry,
+            resolve: (id) =>
+                widget.entries.where((entry) => entry.id == id).singleOrNull,
             enabled: widget.onEntryFavoriteDrop != null,
-            canAccept: (entry) => !entry.isFavorite,
+            needsChange: (entry) => !entry.isFavorite,
             onAccept: (entry) => widget.onEntryFavoriteDrop?.call(entry.id),
             child: GallerySidebarFavoritesItem(
               key: const ValueKey('tag-library-favorites'),
@@ -398,42 +402,43 @@ class _CategoryTreeViewState extends State<CategoryTreeView> {
       return child;
     }
 
-    return DragTarget<TagLibraryEntry>(
-      onWillAcceptWithDetails: (details) {
-        // 如果词条已经在这个分类，不接受
-        if (details.data.categoryId == categoryId) return false;
-        return true;
-      },
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        widget.onEntryDrop?.call(details.data.id, categoryId);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isAccepting = candidateData.isNotEmpty;
+    return LibraryClassificationDropTarget<TagLibraryEntry>(
+      kind: AgentChatResourceKind.tagLibraryEntry,
+      resolve: (id) =>
+          widget.entries.where((entry) => entry.id == id).singleOrNull,
+      needsChange: (entry) => entry.categoryId != categoryId,
+      onAccept: (entry) => widget.onEntryDrop?.call(entry.id, categoryId),
+      child: Builder(
+        builder: (context) {
+          final isAccepting =
+              LibraryClassificationDropTargetStatus.isAcceptingOf(context);
 
-        return AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            gradient: isAccepting
-                ? LinearGradient(
-                    colors: [
-                      Colors.green.withValues(alpha: 0.15),
-                      Colors.green.withValues(alpha: 0.05),
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  )
-                : null,
-            border: isAccepting
-                ? const Border(left: BorderSide(color: Colors.green, width: 4))
-                : null,
-            borderRadius: isAccepting ? BorderRadius.circular(8) : null,
-          ),
-          child: child,
-        );
-      },
+          return AnimatedContainer(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              gradient: isAccepting
+                  ? LinearGradient(
+                      colors: [
+                        Colors.green.withValues(alpha: 0.15),
+                        Colors.green.withValues(alpha: 0.05),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    )
+                  : null,
+              border: isAccepting
+                  ? const Border(
+                      left: BorderSide(color: Colors.green, width: 4),
+                    )
+                  : null,
+              borderRadius: isAccepting ? BorderRadius.circular(8) : null,
+            ),
+            child: child,
+          );
+        },
+      ),
     );
   }
 

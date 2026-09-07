@@ -1,3 +1,6 @@
+import '../../widgets/common/image_card_action.dart';
+import '../../widgets/common/image_card_batch_scope.dart';
+import '../../selection/card_selection_scope.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -76,6 +79,12 @@ class _LocalGalleryScreenState extends ConsumerState<LocalGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     final galleryState = ref.watch(localGalleryNotifierProvider);
+    ref.listen(localGalleryNotifierProvider.select((s) => s.filterCriteria), (
+      _,
+      _,
+    ) {
+      ref.read(localGallerySelectionNotifierProvider.notifier).exit();
+    });
     final bulkOperation = ref.watch(bulkOperationNotifierProvider);
     final categoryState = ref.watch(galleryCategoryNotifierProvider);
     final isSelectionMode = ref.watch(
@@ -90,45 +99,126 @@ class _LocalGalleryScreenState extends ConsumerState<LocalGalleryScreen> {
       ref.read(galleryCategoryNotifierProvider.notifier).clearError();
     });
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) => PopScope<void>(
-        canPop: !isSelectionMode,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && isSelectionMode) {
-            ref.read(localGallerySelectionNotifierProvider.notifier).exit();
-          }
-        },
-        child: PageShortcuts(
-          contextType: ShortcutContext.gallery,
-          shortcuts: _controller.shortcuts,
-          child: KeyboardListener(
-            focusNode: _controller.shortcutsFocusNode,
-            autofocus: true,
-            onKeyEvent: _controller.handleKeyEvent,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final viewModel = LocalGalleryViewModel.fromStates(
-                  gallery: galleryState,
-                  bulkOperation: bulkOperation,
-                  categories: categoryState,
-                  isSelectionMode: isSelectionMode,
-                  categoryPanelRequested: _controller.showCategoryPanel,
-                  isPackingImages: _controller.isPackingImages,
-                  maxWidth: constraints.maxWidth,
-                );
-                return _LocalGalleryShell(
-                  viewModel: viewModel,
-                  controller: _controller,
-                  actions: _actions,
-                  groupedGridViewKey: _groupedGridViewKey,
-                );
+    final selection = ref.watch(localGallerySelectionNotifierProvider);
+    final albumId = ref.watch(
+      galleryAlbumNotifierProvider.select((s) => s.selectedAlbumId),
+    );
+    return ImageCardBatchScope(
+      targetIds: selection.selectedIds,
+      actions: _buildBatchActions(selection.selectedIds, albumId),
+      child: CardSelectionScope(
+        selection: ref.watch(localGallerySelectionNotifierProvider),
+        commands: ref.read(localGallerySelectionNotifierProvider.notifier),
+        orderedIds:
+            (galleryState.isGroupedView
+                    ? galleryState.groupedImages
+                    : galleryState.currentImages)
+                .map((e) => e.path)
+                .toList(),
+        child: CardSelectionShortcuts(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => PopScope<void>(
+              canPop: !isSelectionMode,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop && isSelectionMode) {
+                  ref
+                      .read(localGallerySelectionNotifierProvider.notifier)
+                      .exit();
+                }
               },
+              child: PageShortcuts(
+                contextType: ShortcutContext.gallery,
+                shortcuts: _controller.shortcuts,
+                child: KeyboardListener(
+                  focusNode: _controller.shortcutsFocusNode,
+                  autofocus: true,
+                  onKeyEvent: _controller.handleKeyEvent,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final viewModel = LocalGalleryViewModel.fromStates(
+                        gallery: galleryState,
+                        bulkOperation: bulkOperation,
+                        categories: categoryState,
+                        isSelectionMode: isSelectionMode,
+                        categoryPanelRequested: _controller.showCategoryPanel,
+                        isPackingImages: _controller.isPackingImages,
+                        maxWidth: constraints.maxWidth,
+                      );
+                      return _LocalGalleryShell(
+                        viewModel: viewModel,
+                        controller: _controller,
+                        actions: _actions,
+                        groupedGridViewKey: _groupedGridViewKey,
+                      );
+                    },
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  List<ImageCardAction> _buildBatchActions(Set<String> ids, String? albumId) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    return [
+      ImageCardAction(
+        id: ImageCardActionId.classify,
+        supportsBatch: true,
+        icon: Icons.drive_file_move_outline,
+        label: l10n.localGallery_moveSelected,
+        invoke: () => _actions.moveSelectedToCategory(ids),
+        iconColor: theme.colorScheme.secondary,
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.export,
+        isLoading: _controller.isPackingImages,
+        supportsBatch: true,
+        icon: Icons.archive_outlined,
+        label: l10n.localGallery_packSelected,
+        invoke: () =>
+            _controller.runPacking(() => _actions.packSelectedImages(ids)),
+        iconColor: theme.colorScheme.tertiary,
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.edit,
+        supportsBatch: true,
+        icon: Icons.edit_outlined,
+        label: l10n.localGallery_editMetadata,
+        invoke: () => _actions.editSelectedMetadata(ids),
+        iconColor: theme.colorScheme.primary,
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.addToAlbum,
+        supportsBatch: true,
+        icon: Icons.playlist_add,
+        label: l10n.localGallery_addToAlbum,
+        invoke: () => _actions.addSelectedToAlbum(ids),
+        iconColor: theme.colorScheme.secondary,
+      ),
+      if (albumId != null && albumId != 'favorites')
+        ImageCardAction(
+          id: ImageCardActionId.removeFromAlbum,
+          supportsBatch: true,
+          icon: Icons.playlist_remove,
+          label: l10n.localGallery_removeFromAlbum,
+          invoke: () => _actions.removeSelectedFromAlbum(ids, albumId),
+          iconColor: theme.colorScheme.secondary,
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.delete,
+        supportsBatch: true,
+        icon: Icons.delete_outline,
+        label: l10n.common_delete,
+        invoke: () => _actions.deleteSelectedImages(ids),
+        iconColor: theme.colorScheme.error,
+        isDanger: true,
+      ),
+    ];
   }
 }
 
@@ -186,12 +276,6 @@ class _LocalGalleryShell extends ConsumerWidget {
 
   Widget _buildToolbar(BuildContext context, WidgetRef ref) {
     final bulk = viewModel.bulkOperation;
-    // 浏览具体相簿（非全部/收藏）时才提供“移出相簿”入口
-    final selectedAlbumId = ref.watch(
-      galleryAlbumNotifierProvider.select((value) => value.selectedAlbumId),
-    );
-    final browsingAlbum =
-        selectedAlbumId != null && selectedAlbumId != 'favorites';
     return LocalGalleryToolbar(
       showPageTitle: true,
       onRefresh: () =>
@@ -203,14 +287,6 @@ class _LocalGalleryShell extends ConsumerWidget {
       onUndo: bulk.canUndo ? actions.undo : null,
       onRedo: bulk.canRedo ? actions.redo : null,
       groupedGridViewKey: groupedGridViewKey,
-      onAddToAlbum: actions.addSelectedToAlbum,
-      onRemoveFromAlbum: browsingAlbum ? actions.removeSelectedFromAlbum : null,
-      onDeleteSelected: actions.deleteSelectedImages,
-      onPackSelected: viewModel.isPackingImages
-          ? null
-          : () => unawaited(controller.runPacking(actions.packSelectedImages)),
-      onEditMetadata: actions.editSelectedMetadata,
-      onMoveToCategory: actions.moveSelectedToCategory,
       showCategoryPanel: viewModel.showPersistentCategories,
       onToggleCategoryPanel: viewModel.usePersistentCategories
           ? controller.toggleCategoryPanel

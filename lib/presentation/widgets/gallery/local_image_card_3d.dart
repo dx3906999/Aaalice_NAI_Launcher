@@ -1,3 +1,5 @@
+import '../../selection/card_selection_scope.dart';
+import '../common/image_card_frame.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -6,10 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../common/image_viewport_surface.dart';
 import '../../../core/cache/local_gallery_thumbnail_provider.dart';
 import '../../../core/mosaic/mosaic_derivative_registry.dart';
-import '../../../core/platform/platform_capabilities.dart';
 import '../../../core/storage/local_storage_service.dart';
 import '../../adaptive/interaction_policy.dart';
 import '../../../core/utils/app_logger.dart';
@@ -21,15 +21,13 @@ import '../../providers/mosaic_settings_provider.dart';
 import '../../providers/share_image_settings_provider.dart';
 import '../../providers/copy_drag_watermark_provider.dart';
 import '../../providers/watermark_settings_provider.dart';
-import '../../themes/theme_extension.dart';
 import '../../utils/clipboard_image.dart';
 import '../common/app_toast.dart';
 import '../common/card_action_buttons.dart';
-import '../common/image_card_hover_motion.dart';
+import '../common/image_card_action.dart';
+import '../common/image_card_action_region.dart';
 import 'local_image_context_menu.dart';
 import 'local_image_hover_preview.dart';
-
-enum _LocalCardAction { favorite, copyImage }
 
 /// 本地图片卡片，提供稳定的选择、快捷操作和键盘交互。
 class LocalImageCard3D extends ConsumerStatefulWidget {
@@ -214,6 +212,10 @@ class _LocalImageCard3DState extends ConsumerState<LocalImageCard3D> {
   }
 
   void _handleCardTap() {
+    if (!_suppressCardTap &&
+        CardSelectionScope.handleTap(context, widget.record.path)) {
+      return;
+    }
     if (_suppressCardTap || _isCopyingImage) {
       _suppressCardTap = false;
       return;
@@ -226,16 +228,22 @@ class _LocalImageCard3DState extends ConsumerState<LocalImageCard3D> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ImageCardActionRegion(
+    resourceId: widget.record.path,
+    actions: _buildActions(),
+    builder: _buildCard,
+  );
+
+  Widget _buildCard(BuildContext context, List<ImageCardAction> actions) {
     final theme = Theme.of(context);
     final cardHeight = widget.height ?? widget.width;
     final colorScheme = theme.colorScheme;
     final interactionPolicy = context.interactionPolicy;
     final isTouch = interactionPolicy.usesTouchActionMenu;
+    final selectionMode =
+        CardSelectionScope.maybeOf(context)?.selection.isActive ?? false;
     final aspectRatio = widget.width / cardHeight;
     final buttonDirection = aspectRatio > 1.3 ? Axis.horizontal : Axis.vertical;
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final motion = theme.appTheme;
     final interactive = widget.onTap != null;
     final fileName = widget.record.path.split(RegExp(r'[/\\]')).last;
 
@@ -244,72 +252,51 @@ class _LocalImageCard3DState extends ConsumerState<LocalImageCard3D> {
       onTapCancel: _handleCardTapCancel,
       onDoubleTap: widget.onDoubleTap,
       onLongPress: widget.onLongPress,
-      onSecondaryTapUp: widget.onSecondaryTapUp,
-      child: ImageCardHoverMotion(
-        hovered: _isHovered,
-        enabled: interactive,
-        child: AnimatedContainer(
-          duration: reducedMotion ? Duration.zero : motion.fastDuration,
-          curve: motion.standardCurve,
-          width: widget.width,
-          height: cardHeight,
-          decoration: BoxDecoration(
-            color: ImageViewportSurface.background,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: _isHovered && interactive ? 0.16 : 0,
+      onSecondaryTapUp: widget.onSendAction == null
+          ? widget.onSecondaryTapUp
+          : null,
+      child: ImageCardFrame(
+        hovered: _isHovered && interactive,
+        focused: _isFocused,
+        selected: widget.isSelected,
+        width: widget.width,
+        height: cardHeight,
+        clipRadius: 10,
+        hoverScaleEnabled: interactive,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildImageLayer(),
+            if (!selectionMode)
+              Positioned(
+                key: const ValueKey('local-image-card-actions'),
+                top: 4,
+                right: 4,
+                left: buttonDirection == Axis.horizontal && !isTouch ? 4 : null,
+                child: _buildActionButtons(
+                  actions,
+                  buttonDirection,
+                  cardHeight,
                 ),
-                blurRadius: _isHovered && interactive ? 14 : 0,
-                offset: Offset(0, _isHovered && interactive ? 6 : 0),
               ),
-            ],
-          ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border:
-                _isFocused && context.interactionPolicy.keyboardNavigationActive
-                ? Border.all(color: colorScheme.primary, width: 1)
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildImageLayer(),
-                Positioned(
-                  key: const ValueKey('local-image-card-actions'),
-                  top: 4,
-                  right: 4,
-                  left: buttonDirection == Axis.horizontal && !isTouch
-                      ? 4
-                      : null,
-                  child: isTouch
-                      ? _buildTouchActionMenu()
-                      : _buildActionButtons(buttonDirection, cardHeight),
-                ),
-                if (widget.isSelected)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: _buildSelectionIndicator(colorScheme),
-                  ),
-                if (widget.isSelected)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+            if (widget.isSelected)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: _buildSelectionIndicator(colorScheme),
+              ),
+            if (widget.isSelected)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -348,6 +335,7 @@ class _LocalImageCard3DState extends ConsumerState<LocalImageCard3D> {
 
     return LocalImageHoverPreview(
       record: widget.record,
+      enabled: !selectionMode,
       child: MouseRegion(
         onEnter: _onHoverEnter,
         onExit: _onHoverExit,
@@ -458,264 +446,99 @@ class _LocalImageCard3DState extends ConsumerState<LocalImageCard3D> {
     );
   }
 
-  Widget _buildTouchActionMenu() {
-    final watermarkEnabled =
-        widget.onSendAction != null &&
-        ref.watch(
-          watermarkSettingsProvider.select(
-            (state) => state.configuration.enabled,
-          ),
-        );
-    final isWatermarkDerivative =
-        watermarkEnabled &&
-        WatermarkDerivativeRegistry(
-          ref.read(localStorageServiceProvider),
-        ).isDerivative(widget.record.path);
-
-    final mosaicEnabled =
-        widget.onSendAction != null &&
-        ref.watch(
-          mosaicSettingsProvider.select((state) => state.configuration.enabled),
-        );
-    final isMosaicDerivative =
-        mosaicEnabled &&
-        MosaicDerivativeRegistry(
-          ref.read(localStorageServiceProvider),
-        ).isDerivative(widget.record.path);
-
-    PopupMenuItem<Object> item({
-      required Object value,
-      required IconData icon,
-      required String label,
-      Color? color,
-    }) {
-      return PopupMenuItem<Object>(
-        value: value,
-        child: ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(icon, color: color),
-          title: Text(label),
-        ),
-      );
-    }
-
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => _suppressCardTap = true,
-      onPointerUp: (_) {
-        scheduleMicrotask(() => _suppressCardTap = false);
-      },
-      onPointerCancel: (_) => _suppressCardTap = false,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: PopupMenuButton<Object>(
-          tooltip: context.l10n.common_moreActions,
-          constraints: const BoxConstraints(minWidth: 280, maxWidth: 340),
-          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-          onSelected: (action) async {
-            if (action == _LocalCardAction.favorite) {
-              widget.onFavoriteToggle?.call();
-            } else if (action == _LocalCardAction.copyImage) {
-              await _copyImageToClipboard();
-            } else if (action is LocalImageContextAction) {
-              await widget.onSendAction?.call(action);
-            }
-          },
-          itemBuilder: (context) => <PopupMenuEntry<Object>>[
-            if (widget.onSendAction != null) ...[
-              ...LocalImageContextMenu.buildSendEntries(
-                context,
-                isKritaConnected: widget.isKritaConnected,
-              ),
-              const PopupMenuDivider(),
-            ],
-            if (widget.onFavoriteToggle != null)
-              item(
-                value: _LocalCardAction.favorite,
-                icon: widget.record.isFavorite
-                    ? Icons.favorite
-                    : Icons.favorite_border,
-                label: widget.record.isFavorite
-                    ? context.l10n.common_unfavorite
-                    : context.l10n.common_favorite,
-                color: widget.record.isFavorite ? Colors.redAccent : null,
-              ),
-            if (widget.onSendAction != null &&
-                PlatformCapabilities.current.supportsSystemGalleryExport)
-              item(
-                value: LocalImageContextAction.saveToSystemGallery,
-                icon: Icons.save_alt_rounded,
-                label: context.l10n.localGallery_saveToSystemGallery,
-              ),
-            item(
-              value: _LocalCardAction.copyImage,
-              icon: Icons.copy,
-              label: context.l10n.shortcut_action_copy_image,
-            ),
-            if (widget.onSendAction != null && widget.enableAddToAgent)
-              item(
-                value: LocalImageContextAction.addToAgent,
-                icon: Icons.smart_toy_outlined,
-                label: context.l10n.agentChat_addResource,
-              ),
-            if (widget.onSendAction != null)
-              item(
-                value: LocalImageContextAction.moveToCategory,
-                icon: Icons.drive_file_move_outline,
-                label: context.l10n.localGallery_moveToCategory,
-              ),
-            if (watermarkEnabled)
-              item(
-                value: LocalImageContextAction.createWatermark,
-                icon: Icons.branding_watermark_outlined,
-                label: isWatermarkDerivative
-                    ? context.l10n.watermark_actionRegenerate
-                    : context.l10n.watermark_actionCreate,
-              ),
-            if (mosaicEnabled)
-              item(
-                value: LocalImageContextAction.createMosaic,
-                icon: Icons.grid_on_rounded,
-                label: isMosaicDerivative
-                    ? context.l10n.mosaic_actionRegenerate
-                    : context.l10n.mosaic_actionCreate,
-              ),
-            if (widget.onSendAction != null) ...[
-              const PopupMenuDivider(),
-              item(
-                value: LocalImageContextAction.copyPrompt,
-                icon: Icons.text_snippet_outlined,
-                label: context.l10n.localGallery_copyPrompt,
-              ),
-              item(
-                value: LocalImageContextAction.delete,
-                icon: Icons.delete_outline,
-                label: context.l10n.common_delete,
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ],
-          ],
-        ),
-      ),
+  List<ImageCardAction> _buildActions() {
+    final l10n = context.l10n;
+    final watermarkEnabled = ref.watch(
+      watermarkSettingsProvider.select((s) => s.configuration.enabled),
     );
-  }
-
-  Widget _buildActionButtons(Axis direction, double cardHeight) {
-    final buttons = <CardActionButtonConfig>[
+    final mosaicEnabled = ref.watch(
+      mosaicSettingsProvider.select((s) => s.configuration.enabled),
+    );
+    final storage = ref.read(localStorageServiceProvider);
+    final metadata = widget.record.metadata;
+    return [
+      if (widget.onDoubleTap != null || widget.onTap != null)
+        ImageCardAction(
+          id: ImageCardActionId.viewDetail,
+          icon: Icons.open_in_full,
+          label: l10n.image_viewDetail,
+          invoke: widget.onDoubleTap ?? widget.onTap!,
+          showOnHover: false,
+        ),
       if (widget.onFavoriteToggle != null)
-        CardActionButtonConfig(
+        ImageCardAction(
+          id: ImageCardActionId.favorite,
           icon: widget.record.isFavorite
               ? Icons.favorite
               : Icons.favorite_border,
-          tooltip: widget.record.isFavorite
-              ? context.l10n.common_unfavorite
-              : context.l10n.common_favorite,
+          label: widget.record.isFavorite
+              ? l10n.common_unfavorite
+              : l10n.common_favorite,
           iconColor: widget.record.isFavorite ? Colors.red : Colors.white,
-          onPressed: widget.onFavoriteToggle!,
+          invoke: widget.onFavoriteToggle!,
         ),
-      if (widget.onSendAction != null && widget.enableAddToAgent)
-        CardActionButtonConfig(
-          icon: Icons.smart_toy_outlined,
-          tooltip: context.l10n.agentChat_addResource,
-          onPressed: () => unawaited(
-            widget.onSendAction!(LocalImageContextAction.addToAgent),
-          ),
-        ),
-      CardActionButtonConfig(
+      ImageCardAction(
+        id: ImageCardActionId.copy,
         icon: Icons.copy,
-        tooltip: context.l10n.shortcut_action_copy_image,
+        label: l10n.shortcut_action_copy_image,
         isLoading: _isCopyingImage,
-        onPressed: _copyImageToClipboard,
+        invoke: _copyImageToClipboard,
       ),
-      if (widget.onSendAction != null) ...[
-        if (PlatformCapabilities.current.supportsDlssEnhancement)
-          CardActionButtonConfig(
-            icon: Icons.tonality_outlined,
-            tooltip: context.l10n.dlss_title,
-            onPressed: () => unawaited(
-              widget.onSendAction!(LocalImageContextAction.dlssEnhance),
-            ),
-          ),
-        CardActionButtonConfig(
-          icon: Icons.text_snippet_outlined,
-          tooltip: context.l10n.localGallery_copyPrompt,
-          onPressed: () => unawaited(
-            widget.onSendAction!(LocalImageContextAction.copyPrompt),
-          ),
+      if (widget.onSendAction != null)
+        ...LocalImageContextMenu.buildActions(
+          context,
+          onAction: widget.onSendAction!,
+          hasImportableMetadata: metadata?.hasData == true,
+          hasPrompt: true,
+          hasSeed: metadata?.seed != null,
+          isKritaConnected: widget.isKritaConnected,
+          watermarkEnabled: watermarkEnabled,
+          isWatermarkDerivative: WatermarkDerivativeRegistry(
+            storage,
+          ).isDerivative(widget.record.path),
+          mosaicEnabled: mosaicEnabled,
+          isMosaicDerivative: MosaicDerivativeRegistry(
+            storage,
+          ).isDerivative(widget.record.path),
+        ).where(
+          (a) =>
+              widget.enableAddToAgent || a.id != ImageCardActionId.addToAgent,
         ),
-        CardActionButtonConfig(
-          icon: Icons.send,
-          tooltip: context.l10n.localGallery_moreImageActions,
-          onPressed: () => unawaited(_showSendMenu(context)),
+      if (widget.onLongPress != null)
+        ImageCardAction(
+          id: ImageCardActionId.select,
+          icon: Icons.check_circle_outline,
+          label: l10n.common_multiSelect,
+          invoke: widget.onLongPress!,
+          showOnHover: false,
         ),
-        CardActionButtonConfig(
-          icon: Icons.delete_outline,
-          tooltip: context.l10n.common_delete,
-          iconColor: Theme.of(context).colorScheme.error,
-          onPressed: () =>
-              unawaited(widget.onSendAction!(LocalImageContextAction.delete)),
-        ),
-      ],
     ];
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => _suppressCardTap = true,
-      onPointerUp: (_) {
-        scheduleMicrotask(() => _suppressCardTap = false);
+  }
+
+  Widget _buildActionButtons(
+    List<ImageCardAction> actions,
+    Axis direction,
+    double cardHeight,
+  ) => Listener(
+    behavior: HitTestBehavior.opaque,
+    onPointerDown: (_) => _suppressCardTap = true,
+    onPointerUp: (_) {
+      scheduleMicrotask(() => _suppressCardTap = false);
+    },
+    onPointerCancel: (_) => _suppressCardTap = false,
+    child: CardActionButtons(
+      availableSize: Size(widget.width - 8, cardHeight - 8),
+      visible: _isHovered || _isFocused,
+      direction: direction,
+      buttons: actions,
+      groupMenus: {
+        ImageCardActionGroup.use: (
+          icon: Icons.send,
+          label: context.l10n.localGallery_moreImageActions,
+        ),
       },
-      onPointerCancel: (_) => _suppressCardTap = false,
-      child: CardActionButtons(
-        availableSize: Size(widget.width - 8, cardHeight - 8),
-        visible: _isHovered || _isFocused,
-        direction: direction,
-        buttons: buttons,
-      ),
-    );
-  }
-
-  Future<void> _showSendMenu(BuildContext context) async {
-    final RenderBox? button = context.findRenderObject() as RenderBox?;
-    if (button == null) return;
-
-    final offset = button.localToGlobal(Offset.zero);
-    const menuWidth = 320.0;
-    double left = offset.dx - menuWidth - 8;
-    final top = offset.dy;
-
-    if (left < 8) left = offset.dx + button.size.width + 8;
-
-    final watermarkEnabled = ref.read(
-      watermarkSettingsProvider.select((state) => state.configuration.enabled),
-    );
-    final isWatermarkDerivative =
-        watermarkEnabled &&
-        WatermarkDerivativeRegistry(
-          ref.read(localStorageServiceProvider),
-        ).isDerivative(widget.record.path);
-    final mosaicEnabled = ref.read(
-      mosaicSettingsProvider.select((state) => state.configuration.enabled),
-    );
-    final isMosaicDerivative =
-        mosaicEnabled &&
-        MosaicDerivativeRegistry(
-          ref.read(localStorageServiceProvider),
-        ).isDerivative(widget.record.path);
-    final action = await LocalImageContextMenu.showSendActions(
-      context,
-      position: Offset(left, top),
-      isKritaConnected: widget.isKritaConnected,
-      watermarkEnabled: watermarkEnabled,
-      isWatermarkDerivative: isWatermarkDerivative,
-      mosaicEnabled: mosaicEnabled,
-      isMosaicDerivative: isMosaicDerivative,
-    );
-    if (action == null || !mounted) return;
-
-    await widget.onSendAction?.call(action);
-  }
+    ),
+  );
 
   Widget _buildSelectionIndicator(ColorScheme colorScheme) {
     return Container(

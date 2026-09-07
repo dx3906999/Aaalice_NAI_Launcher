@@ -1,4 +1,25 @@
 {
+  "cardAction_singleScope": "この項目のみ",
+  "cardDrag_preparingCount": "{count} 件のドラッグ用リソースを準備中…",
+  "@cardDrag_preparingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cardDrop_unsupported": "この場所では、このリソースの種類または件数を扱えません。対応するインポート先を使用してください。",
+  "cardAction_batchFailed": "{total} 件中 {failed} 件が失敗しました",
+  "@cardAction_batchFailed": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "generation_enhancementFailed": "補正に失敗しました。元画像は保持されています",
   "generation_enhancementRetryHint": "画像メニューの DLSS NR から、補正のみ再試行できます。",
 

@@ -20,11 +20,13 @@ class LocalImageHoverPreview extends StatefulWidget {
     required this.record,
     required this.child,
     this.hoverDelay = const Duration(milliseconds: 280),
+    this.enabled = true,
   });
 
   final LocalImageRecord record;
   final Widget child;
   final Duration hoverDelay;
+  final bool enabled;
 
   @override
   State<LocalImageHoverPreview> createState() => _LocalImageHoverPreviewState();
@@ -45,6 +47,7 @@ class _LocalImageHoverPreviewState extends State<LocalImageHoverPreview> {
   @override
   void didUpdateWidget(covariant LocalImageHoverPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) _hoverController.dismiss();
     if (oldWidget.record.path != widget.record.path) {
       _hoverController.dismissFor(oldWidget.record.path);
       _resolvedMetadata = null;
@@ -53,6 +56,7 @@ class _LocalImageHoverPreviewState extends State<LocalImageHoverPreview> {
   }
 
   void _schedulePreview() {
+    if (!widget.enabled) return;
     unawaited(_resolveMetadata());
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) return;

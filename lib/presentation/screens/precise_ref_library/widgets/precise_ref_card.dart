@@ -1,3 +1,5 @@
+import '../../../selection/card_selection_scope.dart';
+import '../../../widgets/common/image_card_frame.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,19 +15,10 @@ import '../../../adaptive/interaction_policy.dart';
 import '../../../widgets/app_branch_visibility.dart';
 import '../../../widgets/common/card_action_buttons.dart';
 import '../../../widgets/common/image_card_actions.dart';
-import '../../../widgets/common/image_card_hover_motion.dart';
+import '../../../widgets/common/image_card_action_region.dart';
 import '../../../widgets/common/image_hover_preview_controller.dart';
 import '../../../widgets/common/library_card_badges.dart';
 import 'precise_ref_hover_preview.dart';
-
-enum _PreciseRefCardAction {
-  addToAgent,
-  sendToPreciseRef,
-  sendToImg2Img,
-  edit,
-  classify,
-  delete,
-}
 
 /// 精准参考库条目卡片
 ///
@@ -48,12 +41,12 @@ class PreciseRefCard extends ConsumerStatefulWidget {
   });
 
   final PreciseRefLibraryEntry entry;
-  final VoidCallback? onSendToPreciseRef;
-  final VoidCallback? onSendToImg2Img;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-  final VoidCallback? onToggleFavorite;
-  final VoidCallback? onClassify;
+  final ImageCardCallback? onSendToPreciseRef;
+  final ImageCardCallback? onSendToImg2Img;
+  final ImageCardCallback? onEdit;
+  final ImageCardCallback? onDelete;
+  final ImageCardCallback? onToggleFavorite;
+  final ImageCardCallback? onClassify;
   final bool isSelectionMode;
   final bool isSelected;
   final VoidCallback? onToggleSelection;
@@ -86,6 +79,7 @@ class _PreciseRefCardState extends ConsumerState<PreciseRefCard> {
   @override
   void didUpdateWidget(covariant PreciseRefCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.isSelectionMode) _hoverController.dismiss();
     if (oldWidget.entry.id != widget.entry.id) {
       _hoverController.dismissFor(oldWidget.entry.id);
       _thumbnail = null;
@@ -140,6 +134,7 @@ class _PreciseRefCardState extends ConsumerState<PreciseRefCard> {
 
   void _onHoverEnter(PointerEvent event) {
     setState(() => _hovering = true);
+    if (widget.isSelectionMode) return;
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) return;
     final previewSize = computePreciseRefHoverPreviewBounds(
@@ -174,11 +169,17 @@ class _PreciseRefCardState extends ConsumerState<PreciseRefCard> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ImageCardActionRegion(
+    resourceId: widget.entry.id,
+    actions: _buildActions(),
+    onMenuOpened: () => _hoverController.dismiss(),
+    builder: _buildCard,
+  );
+
+  Widget _buildCard(BuildContext context, List<ImageCardAction> actions) {
     _loadThumbnailIfNeeded();
     final theme = Theme.of(context);
     final isTouch = context.interactionPolicy.usesTouchActionMenu;
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
     return CompositedTransformTarget(
       link: _layerLink,
@@ -187,84 +188,66 @@ class _PreciseRefCardState extends ConsumerState<PreciseRefCard> {
         onExit: _onHoverExit,
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: widget.isSelectionMode
-              ? widget.onToggleSelection
-              : widget.onSendToPreciseRef,
+          onTap: () {
+            if (CardSelectionScope.handleTap(context, widget.entry.id)) return;
+            (widget.isSelectionMode
+                    ? widget.onToggleSelection
+                    : widget.onSendToPreciseRef)
+                ?.call();
+          },
           onLongPress: widget.isSelectionMode
               ? widget.onToggleSelection
               : widget.onEnterSelectionMode,
-          child: ImageCardHoverMotion(
-            hovered: _hovering,
-            enabled: !isTouch,
-            child: AnimatedContainer(
-              duration: reducedMotion
-                  ? Duration.zero
-                  : const Duration(milliseconds: 150),
-              curve: Curves.easeOutCubic,
-              transform: Matrix4.identity()
-                ..translateByDouble(0, _hovering && !isTouch ? -2 : 0, 0, 1),
-              transformAlignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: ImageViewportSurface.background,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: _hovering ? 0.18 : 0.08,
+          child: ImageCardFrame(
+            hovered: _hovering && !isTouch,
+            selected: widget.isSelected,
+            restingShadow: true,
+            hoverScaleEnabled: !isTouch,
+            hoverLift: 2,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildThumbnail(theme),
+                _buildInfoOverlay(theme),
+                if (isTouch || !_hovering) _buildTypeBadge(),
+                if (widget.isSelectionMode)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Checkbox(
+                      value: widget.isSelected,
+                      onChanged: (_) => widget.onToggleSelection?.call(),
                     ),
-                    blurRadius: _hovering ? 16 : 6,
-                    offset: Offset(0, _hovering ? 7 : 2),
+                  )
+                else if (!isTouch && !_hovering && widget.entry.isFavorite)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: LibraryCardFavoriteBadge(
+                      key: Key(
+                        'precise-ref-card-favorite-badge-${widget.entry.id}',
+                      ),
+                      semanticLabel: context.l10n.common_favorite,
+                    ),
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildThumbnail(theme),
-                    _buildInfoOverlay(theme),
-                    if (isTouch || !_hovering) _buildTypeBadge(),
-                    if (widget.isSelectionMode)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Checkbox(
-                          value: widget.isSelected,
-                          onChanged: (_) => widget.onToggleSelection?.call(),
+                if (!widget.isSelectionMode)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => CardActionButtons(
+                        menuKey: Key(
+                          'precise-ref-card-more-${widget.entry.id}',
                         ),
-                      )
-                    else if (!isTouch && !_hovering && widget.entry.isFavorite)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: LibraryCardFavoriteBadge(
-                          key: Key(
-                            'precise-ref-card-favorite-badge-${widget.entry.id}',
-                          ),
-                          semanticLabel: context.l10n.common_favorite,
-                        ),
+                        touchShortcuts: const {ImageCardActionId.favorite},
+                        touchDirection: Axis.horizontal,
+                        visible: isTouch || _hovering,
+                        direction: Axis.vertical,
+                        buttons: actions,
                       ),
-                    if (!widget.isSelectionMode && isTouch) ...[
-                      Positioned(
-                        top: 6,
-                        right: 54,
-                        child: _buildFavoriteButton(theme),
-                      ),
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: _buildTouchActions(theme),
-                      ),
-                    ] else if (!widget.isSelectionMode && _hovering)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: _buildDesktopActions(theme),
-                      ),
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -343,164 +326,82 @@ class _PreciseRefCardState extends ConsumerState<PreciseRefCard> {
     );
   }
 
-  Widget _buildFavoriteButton(ThemeData theme) {
+  List<ImageCardAction> _buildActions() {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
     final entry = widget.entry;
-    return IconButton(
-      key: Key('precise-ref-card-favorite-${entry.id}'),
-      tooltip: entry.isFavorite
-          ? context.l10n.common_unfavorite
-          : context.l10n.common_favorite,
-      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-      style: ImageOverlayControlStyle.iconButton(
-        context,
-        extent: 48,
-        foregroundColor: entry.isFavorite ? theme.colorScheme.error : null,
-      ),
-      iconSize: 18,
-      icon: Icon(
-        entry.isFavorite
+    final onAddToAgent = ImageCardActionScope.maybeOf(context)?.onAddToAgent;
+    return [
+      if (onAddToAgent != null)
+        ImageCardAction(
+          id: ImageCardActionId.addToAgent,
+          key: Key('precise-ref-card-agent-${entry.id}'),
+          icon: Icons.auto_awesome_outlined,
+          label: l10n.agentChat_addResource,
+          invoke: onAddToAgent,
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.favorite,
+        key: Key('precise-ref-card-favorite-${entry.id}'),
+        icon: entry.isFavorite
             ? Icons.favorite_rounded
             : Icons.favorite_border_rounded,
+        iconColor: entry.isFavorite ? theme.colorScheme.error : null,
+        label: entry.isFavorite ? l10n.common_unfavorite : l10n.common_favorite,
+        invoke: widget.onToggleFavorite ?? () {},
+        enabled: widget.onToggleFavorite != null,
       ),
-      onPressed: widget.onToggleFavorite,
-    );
-  }
+      ImageCardAction(
+        id: ImageCardActionId.preciseReference,
+        key: Key('precise-ref-card-send-${entry.id}'),
+        icon: Icons.center_focus_strong,
+        label: l10n.preciseRefLib_sendToPreciseRef,
+        invoke: widget.onSendToPreciseRef ?? () {},
+        enabled: widget.onSendToPreciseRef != null,
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.imageToImage,
+        key: Key('precise-ref-card-img2img-${entry.id}'),
+        icon: Icons.image_outlined,
+        label: l10n.preciseRefLib_sendToImg2Img,
+        invoke: widget.onSendToImg2Img ?? () {},
+        enabled: widget.onSendToImg2Img != null,
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.edit,
+        key: Key('precise-ref-card-edit-${entry.id}'),
+        icon: Icons.edit_outlined,
+        label: l10n.preciseRefLib_editEntry,
+        invoke: widget.onEdit ?? () {},
+        enabled: widget.onEdit != null,
+      ),
+      ImageCardAction(
+        isDanger: true,
+        id: ImageCardActionId.delete,
+        key: Key('precise-ref-card-delete-${entry.id}'),
+        icon: Icons.delete_outline,
+        iconColor: theme.colorScheme.error,
+        label: l10n.preciseRefLib_deleteEntry,
+        invoke: widget.onDelete ?? () {},
+        enabled: widget.onDelete != null,
+      ),
 
-  Widget _buildDesktopActions(ThemeData theme) {
-    final l10n = context.l10n;
-    final entry = widget.entry;
-    final onAddToAgent = ImageCardActionScope.maybeOf(context)?.onAddToAgent;
-    return CardActionButtons(
-      visible: true,
-      direction: Axis.vertical,
-      buttons: [
-        if (onAddToAgent != null)
-          CardActionButtonConfig(
-            key: Key('precise-ref-card-agent-${entry.id}'),
-            icon: Icons.auto_awesome_outlined,
-            tooltip: l10n.agentChat_addResource,
-            onPressed: onAddToAgent,
-          ),
-        CardActionButtonConfig(
-          key: Key('precise-ref-card-favorite-${entry.id}'),
-          icon: entry.isFavorite
-              ? Icons.favorite_rounded
-              : Icons.favorite_border_rounded,
-          iconColor: entry.isFavorite ? theme.colorScheme.error : null,
-          tooltip: entry.isFavorite
-              ? l10n.common_unfavorite
-              : l10n.common_favorite,
-          onPressed: widget.onToggleFavorite ?? () {},
-          enabled: widget.onToggleFavorite != null,
+      if (widget.onClassify != null)
+        ImageCardAction(
+          id: ImageCardActionId.classify,
+          icon: Icons.category_outlined,
+          label: l10n.preciseRef_referenceType,
+          invoke: widget.onClassify!,
         ),
-        CardActionButtonConfig(
-          key: Key('precise-ref-card-send-${entry.id}'),
-          icon: Icons.center_focus_strong,
-          tooltip: l10n.preciseRefLib_sendToPreciseRef,
-          onPressed: widget.onSendToPreciseRef ?? () {},
-          enabled: widget.onSendToPreciseRef != null,
+      if (widget.onEnterSelectionMode != null)
+        ImageCardAction(
+          id: ImageCardActionId.select,
+          icon: Icons.check_circle_outline,
+          label: l10n.common_multiSelect,
+          invoke: widget.onEnterSelectionMode!,
+          showOnHover: false,
         ),
-        CardActionButtonConfig(
-          key: Key('precise-ref-card-img2img-${entry.id}'),
-          icon: Icons.image_outlined,
-          tooltip: l10n.preciseRefLib_sendToImg2Img,
-          onPressed: widget.onSendToImg2Img ?? () {},
-          enabled: widget.onSendToImg2Img != null,
-        ),
-        CardActionButtonConfig(
-          key: Key('precise-ref-card-edit-${entry.id}'),
-          icon: Icons.edit_outlined,
-          tooltip: l10n.preciseRefLib_editEntry,
-          onPressed: widget.onEdit ?? () {},
-          enabled: widget.onEdit != null,
-        ),
-        CardActionButtonConfig(
-          key: Key('precise-ref-card-delete-${entry.id}'),
-          icon: Icons.delete_outline,
-          iconColor: theme.colorScheme.error,
-          tooltip: l10n.preciseRefLib_deleteEntry,
-          onPressed: widget.onDelete ?? () {},
-          enabled: widget.onDelete != null,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTouchActions(ThemeData theme) {
-    final l10n = context.l10n;
-    final onAddToAgent = ImageCardActionScope.maybeOf(context)?.onAddToAgent;
-    return PopupMenuButton<_PreciseRefCardAction>(
-      key: Key('precise-ref-card-more-${widget.entry.id}'),
-      tooltip: l10n.preciseRefLib_moreActions,
-      constraints: const BoxConstraints(minWidth: 220),
-      onSelected: (action) {
-        switch (action) {
-          case _PreciseRefCardAction.addToAgent:
-            onAddToAgent?.call();
-          case _PreciseRefCardAction.sendToPreciseRef:
-            widget.onSendToPreciseRef?.call();
-          case _PreciseRefCardAction.sendToImg2Img:
-            widget.onSendToImg2Img?.call();
-          case _PreciseRefCardAction.edit:
-            widget.onEdit?.call();
-          case _PreciseRefCardAction.classify:
-            widget.onClassify?.call();
-          case _PreciseRefCardAction.delete:
-            widget.onDelete?.call();
-        }
-      },
-      itemBuilder: (context) => [
-        if (onAddToAgent != null)
-          PopupMenuItem(
-            value: _PreciseRefCardAction.addToAgent,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.auto_awesome_outlined),
-              title: Text(l10n.agentChat_addResource),
-            ),
-          ),
-        PopupMenuItem(
-          value: _PreciseRefCardAction.sendToPreciseRef,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.center_focus_strong),
-            title: Text(l10n.preciseRefLib_sendToPreciseRef),
-          ),
-        ),
-        PopupMenuItem(
-          value: _PreciseRefCardAction.sendToImg2Img,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.image_outlined),
-            title: Text(l10n.preciseRefLib_sendToImg2Img),
-          ),
-        ),
-        PopupMenuItem(
-          value: _PreciseRefCardAction.edit,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.edit_outlined),
-            title: Text(l10n.preciseRefLib_editEntry),
-          ),
-        ),
-        PopupMenuItem(
-          value: _PreciseRefCardAction.classify,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.category_outlined),
-            title: Text(l10n.preciseRef_referenceType),
-          ),
-        ),
-        PopupMenuItem(
-          value: _PreciseRefCardAction.delete,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-            title: Text(l10n.preciseRefLib_deleteEntry),
-          ),
-        ),
-      ],
-    );
+    ];
   }
 
   static String _formatParam(double value) {

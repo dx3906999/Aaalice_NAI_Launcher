@@ -16,7 +16,8 @@ import '../../../providers/reverse_prompt_provider.dart';
 import '../../../providers/tag_library_page_provider.dart';
 import '../../../prompt_assistant/providers/prompt_assistant_history_provider.dart';
 import '../../../utils/asset_protection_guard.dart';
-import '../../../utils/dropped_file_reader.dart';
+import '../../../utils/card_drop_reader.dart';
+import '../../../widgets/common/image_card_action.dart';
 import '../../../../core/utils/localization_extension.dart';
 import '../../../widgets/common/app_toast.dart';
 import '../../../widgets/common/translated_tag_text.dart';
@@ -172,10 +173,11 @@ class _ReversePromptPanelState extends ConsumerState<ReversePromptPanel> {
     if (!PlatformCapabilities.current.supportsExternalFileDrop) return button;
 
     return DropRegion(
-      formats: Formats.standardFormats,
+      formats: cardDropFormats,
       hitTestBehavior: HitTestBehavior.opaque,
       onDropOver: (event) {
-        if (event.session.allowedOperations.contains(DropOperation.copy)) {
+        if (event.session.allowedOperations.contains(DropOperation.copy) &&
+            const CardDropPolicy().accepts(event.session.items)) {
           if (!_isDragging) {
             setState(() => _isDragging = true);
           }
@@ -190,7 +192,7 @@ class _ReversePromptPanelState extends ConsumerState<ReversePromptPanel> {
       },
       onPerformDrop: (event) async {
         setState(() => _isDragging = false);
-        unawaited(_handleDrop(event));
+        await _handleDrop(event);
       },
       child: button,
     );
@@ -552,25 +554,27 @@ class _ReversePromptPanelState extends ConsumerState<ReversePromptPanel> {
   }
 
   Future<void> _handleDrop(PerformDropEvent event) async {
-    var handledAny = false;
-    for (final item in event.session.items) {
-      final reader = item.dataReader;
-      if (reader == null) {
-        continue;
+    final notifier = ref.read(reversePromptProvider.notifier);
+    try {
+      final resources = await readCardDrop(context, event.session.items);
+      final result = await ImageCardBatchResult.execute(resources, (
+        resource,
+      ) async {
+        final file = resource.image;
+        await notifier.addImage(file.bytes, name: file.fileName);
+      });
+      if (result.failures.isNotEmpty) {
+        throw StateError(
+          '${result.failures.length}/${resources.length}: ${result.failures.values.map((failure) => failure.error).join('; ')}',
+        );
       }
-      final file = await DroppedFileReader.read(
-        reader,
-        logTag: 'ReversePromptDrop',
-      );
-      if (file != null) {
-        handledAny = true;
-        await ref
-            .read(reversePromptProvider.notifier)
-            .addImage(file.bytes, name: file.fileName);
+    } catch (error) {
+      if (mounted) {
+        AppToast.error(
+          context,
+          '${context.l10n.reversePrompt_dropUnreadable}: $error',
+        );
       }
-    }
-    if (!handledAny && mounted) {
-      AppToast.warning(context, context.l10n.reversePrompt_dropUnreadable);
     }
   }
 

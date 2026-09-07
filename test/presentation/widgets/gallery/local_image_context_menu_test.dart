@@ -1,300 +1,262 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nai_launcher/core/platform/platform_capabilities.dart';
 import 'package:nai_launcher/l10n/app_localizations.dart';
+import 'package:nai_launcher/presentation/adaptive/interaction_policy.dart';
+import 'package:nai_launcher/presentation/widgets/common/image_card_action.dart';
+import 'package:nai_launcher/presentation/widgets/common/image_card_context_menu.dart';
+import 'package:nai_launcher/presentation/widgets/common/pro_context_menu.dart';
 import 'package:nai_launcher/presentation/widgets/gallery/local_image_context_menu.dart';
 
-void main() {
-  setUp(() {
-    PlatformCapabilities.debugOverride = PlatformCapabilities.forPlatform(
-      TargetPlatform.windows,
-    );
-  });
+List<ProMenuItem> menuItems(WidgetTester tester) => tester
+    .widget<ProContextMenu>(find.byType(ProContextMenu))
+    .items
+    .where((i) => !i.isDivider)
+    .toList();
 
+void main() {
+  setUp(
+    () => PlatformCapabilities.debugOverride = PlatformCapabilities.forPlatform(
+      TargetPlatform.windows,
+    ),
+  );
   tearDown(() => PlatformCapabilities.debugOverride = null);
 
-  testWidgets('shows direct send actions in the agreed order', (tester) async {
-    LocalImageContextAction? selected;
+  testWidgets(
+    'single descriptor set retains every local action and disables disconnected Krita',
+    (tester) async {
+      LocalImageContextAction? selected;
+      await tester.pumpWidget(
+        _MenuHarness(onSelected: (value) => selected = value),
+      );
+      await tester.tap(find.text('Open'), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      final items = menuItems(tester);
+      final expected = LocalImageContextAction.values
+          .where(
+            (action) => !{
+              LocalImageContextAction.createWatermark,
+              LocalImageContextAction.createMosaic,
+              LocalImageContextAction.saveToSystemGallery,
+            }.contains(action),
+          )
+          .map(LocalImageContextMenu.idFor)
+          .map((id) => id.name);
+      expect(items.map((i) => i.id), unorderedEquals(expected));
+      expect(items.last.id, ImageCardActionId.delete.name);
+      expect(
+        items
+            .singleWhere((i) => i.id == ImageCardActionId.sendToKrita.name)
+            .enabled,
+        isFalse,
+      );
+      await tester.ensureVisible(find.text('Send to Krita'));
+      await tester.tap(find.text('Send to Krita'));
+      await tester.pump();
+      expect(selected, isNull);
+      expect(find.byType(ProContextMenu), findsOneWidget);
+      await tester.ensureVisible(find.text('Send to Vibe Transfer'));
+      await tester.tap(find.text('Send to Vibe Transfer'));
+      await tester.pumpAndSettle();
+      expect(selected, LocalImageContextAction.sendToStyleTransfer);
+    },
+  );
 
-    await tester.pumpWidget(
-      _MenuHarness(
-        isKritaConnected: false,
-        onSelected: (value) => selected = value,
-      ),
-    );
+  testWidgets(
+    'metadata availability and optional watermark affect the same descriptor set',
+    (tester) async {
+      await tester.pumpWidget(
+        const _MenuHarness(metadata: false, watermark: true, krita: true),
+      );
+      await tester.tap(find.text('Open'), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      final items = menuItems(tester);
+      final ids = items.map((i) => i.id).toSet();
+      expect(ids, isNot(contains(ImageCardActionId.importMetadata.name)));
+      expect(ids, isNot(contains(ImageCardActionId.copyPrompt.name)));
+      expect(ids, isNot(contains(ImageCardActionId.copySeed.name)));
+      expect(
+        items
+            .singleWhere((i) => i.id == ImageCardActionId.createWatermark.name)
+            .enabled,
+        isTrue,
+      );
+      expect(
+        items
+            .singleWhere((i) => i.id == ImageCardActionId.sendToKrita.name)
+            .enabled,
+        isTrue,
+      );
+    },
+  );
 
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'send menu reuses business descriptors without information or delete actions',
+    (tester) async {
+      await tester.pumpWidget(
+        const _MenuHarness(sendOnly: true, watermark: true),
+      );
+      await tester.tap(find.text('Open'), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      final ids = menuItems(tester).map((i) => i.id).toSet();
+      expect(
+        ids,
+        containsAll([
+          ImageCardActionId.sendToGeneration.name,
+          ImageCardActionId.imageToImage.name,
+          ImageCardActionId.reversePrompt.name,
+          ImageCardActionId.vibeTransfer.name,
+          ImageCardActionId.preciseReference.name,
+          ImageCardActionId.saveToPreciseRefLibrary.name,
+          ImageCardActionId.sendToKrita.name,
+          ImageCardActionId.upscale.name,
+          ImageCardActionId.dlssEnhance.name,
+          ImageCardActionId.shareDiscord.name,
+          ImageCardActionId.createWatermark.name,
+        ]),
+      );
+      expect(ids.length, 11);
+    },
+  );
 
-    final items = tester
-        .widgetList<PopupMenuItem<LocalImageContextAction>>(
-          find.byWidgetPredicate(
-            (widget) => widget is PopupMenuItem<LocalImageContextAction>,
-          ),
-        )
-        .toList();
-
-    expect(items.map((item) => item.value).toList(), const [
-      LocalImageContextAction.addToAgent,
-      LocalImageContextAction.moveToCategory,
-      LocalImageContextAction.sendToTextToImage,
-      LocalImageContextAction.sendToImg2Img,
-      LocalImageContextAction.sendToReversePrompt,
-      LocalImageContextAction.sendToStyleTransfer,
-      LocalImageContextAction.sendToPreciseReference,
-      LocalImageContextAction.saveToPreciseRefLibrary,
-      LocalImageContextAction.sendToKrita,
-      LocalImageContextAction.upscale,
-      LocalImageContextAction.dlssEnhance,
-      LocalImageContextAction.shareToDiscord,
-      LocalImageContextAction.importMetadata,
-      LocalImageContextAction.copyPrompt,
-      LocalImageContextAction.copySeed,
-      LocalImageContextAction.showInFolder,
-      LocalImageContextAction.delete,
-    ]);
-    expect(find.text('Send to...'), findsNothing);
-    expect(find.text('Send to Text to Image'), findsOneWidget);
-    expect(find.text('Send to Image2Image'), findsOneWidget);
-    expect(find.text('Send to Reverse Prompt'), findsOneWidget);
-    expect(find.text('Send to Vibe Transfer'), findsOneWidget);
-    expect(find.text('Send to Precise Reference'), findsOneWidget);
-    expect(find.text('Upscale'), findsOneWidget);
-    expect(find.text('Share to Discord'), findsOneWidget);
-    expect(find.text('Import Image Metadata'), findsOneWidget);
-
-    final kritaItem = items.singleWhere(
-      (item) => item.value == LocalImageContextAction.sendToKrita,
-    );
-    expect(kritaItem.enabled, isFalse);
-
-    await tester.tap(find.text('Send to Krita'));
-    await tester.pump();
-    expect(selected, isNull);
-    expect(find.text('Send to Krita'), findsOneWidget);
-
-    await tester.tap(find.text('Send to Vibe Transfer'));
-    await tester.pumpAndSettle();
-    expect(selected, LocalImageContextAction.sendToStyleTransfer);
-  });
-
-  testWidgets('shows the watermark command when the tool is enabled', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const _MenuHarness(isKritaConnected: true, watermarkEnabled: true),
-    );
-
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Create watermarked copy…'), findsOneWidget);
-    final item = tester
-        .widgetList<PopupMenuItem<LocalImageContextAction>>(
-          find.byType(PopupMenuItem<LocalImageContextAction>),
-        )
-        .singleWhere(
-          (item) => item.value == LocalImageContextAction.createWatermark,
-        );
-    expect(item.enabled, isTrue);
-  });
-
-  testWidgets('Android menu exposes system photo gallery export', (
+  testWidgets('Android touch menu keeps system gallery export reachable', (
     tester,
   ) async {
     PlatformCapabilities.debugOverride = PlatformCapabilities.forPlatform(
       TargetPlatform.android,
     );
-    await tester.pumpWidget(const _MenuHarness(isKritaConnected: false));
-
+    await tester.pumpWidget(const _MenuHarness(touch: true));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Save to photo gallery'), findsOneWidget);
-    final item = tester
-        .widgetList<PopupMenuItem<LocalImageContextAction>>(
-          find.byType(PopupMenuItem<LocalImageContextAction>),
-        )
-        .singleWhere(
-          (entry) => entry.value == LocalImageContextAction.saveToSystemGallery,
-        );
-    expect(item.enabled, isTrue);
-  });
-
-  testWidgets('opens without an expand animation', (tester) async {
-    await tester.pumpWidget(const _MenuHarness(isKritaConnected: true));
-
-    await tester.tap(find.text('Open'));
-    await tester.pump();
-
-    expect(find.text('Share to Discord'), findsOneWidget);
-  });
-
-  testWidgets(
-    'fits the complete menu inside a 320dp safe area at an edge anchor',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(
-        const _MenuHarness(
-          isKritaConnected: true,
-          position: Offset(319, 100),
-          safePadding: EdgeInsets.symmetric(horizontal: 24),
-        ),
-      );
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-
-      final items = find.byType(PopupMenuItem<LocalImageContextAction>);
-      expect(items, findsNWidgets(17));
-      for (final element in items.evaluate()) {
-        final rect = tester.getRect(
-          find.byElementPredicate((candidate) => candidate == element),
-        );
-        expect(rect.left, greaterThanOrEqualTo(32));
-        expect(rect.right, lessThanOrEqualTo(288));
-      }
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('hides image information actions when metadata is unavailable', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const _MenuHarness(
-        hasImportableMetadata: false,
-        hasPrompt: false,
-        hasSeed: false,
-        isKritaConnected: true,
-      ),
+    await tester.scrollUntilVisible(
+      find.text('Save to photo gallery'),
+      250,
+      scrollable: find.byType(Scrollable).last,
     );
-
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Import Image Metadata'), findsNothing);
-    expect(find.text('Copy Prompt'), findsNothing);
-    expect(find.text('Copy Seed'), findsNothing);
-
-    final kritaItem = tester
-        .widgetList<PopupMenuItem<LocalImageContextAction>>(
-          find.byWidgetPredicate(
-            (widget) => widget is PopupMenuItem<LocalImageContextAction>,
-          ),
-        )
-        .singleWhere(
-          (item) => item.value == LocalImageContextAction.sendToKrita,
-        );
-    expect(kritaItem.enabled, isTrue);
-  });
-
-  testWidgets('send button menu reuses the context menu send action group', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const _MenuHarness(
-        isKritaConnected: true,
-        sendOnly: true,
-        watermarkEnabled: true,
-      ),
+    expect(
+      tester
+          .widget<ListTile>(
+            find.ancestor(
+              of: find.text('Save to photo gallery'),
+              matching: find.byType(ListTile),
+            ),
+          )
+          .enabled,
+      isTrue,
     );
-
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-
-    final actions = tester
-        .widgetList<PopupMenuItem<LocalImageContextAction>>(
-          find.byWidgetPredicate(
-            (widget) => widget is PopupMenuItem<LocalImageContextAction>,
-          ),
-        )
-        .map((item) => item.value)
-        .toList();
-
-    expect(actions, const [
-      LocalImageContextAction.sendToTextToImage,
-      LocalImageContextAction.sendToImg2Img,
-      LocalImageContextAction.sendToReversePrompt,
-      LocalImageContextAction.sendToStyleTransfer,
-      LocalImageContextAction.sendToPreciseReference,
-      LocalImageContextAction.saveToPreciseRefLibrary,
-      LocalImageContextAction.sendToKrita,
-      LocalImageContextAction.upscale,
-      LocalImageContextAction.dlssEnhance,
-      LocalImageContextAction.shareToDiscord,
-      LocalImageContextAction.createWatermark,
-    ]);
-    expect(find.text('Create watermarked copy…'), findsOneWidget);
-    expect(find.text('Import Image Metadata'), findsNothing);
-    expect(find.text('Show in Folder'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
+
+  for (final width in [320.0, 600.0, 840.0, 1180.0, 1600.0]) {
+    testWidgets(
+      'pointer menu fits safe bounds and reaches last action at $width and 3x',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          _MenuHarness(
+            position: Offset(width - 1, 620),
+            safePadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 16,
+            ),
+            scale: 3,
+          ),
+        );
+        await tester.tap(find.text('Open'), kind: PointerDeviceKind.mouse);
+        await tester.pumpAndSettle();
+        final rect = tester.getRect(find.byType(ProContextMenu));
+        // ProContextMenu owns a Positioned child; inspect the actual material surface.
+        final surface = find
+            .descendant(
+              of: find.byType(ProContextMenu),
+              matching: find.byType(Material),
+            )
+            .first;
+        final bounds = tester.getRect(surface);
+        expect(bounds.left, greaterThanOrEqualTo(24));
+        expect(bounds.right, lessThanOrEqualTo(width - 24));
+        expect(rect.size.isEmpty, isFalse);
+        await tester.ensureVisible(find.text('Delete'));
+        expect(find.text('Delete').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
 
 class _MenuHarness extends StatelessWidget {
   const _MenuHarness({
-    this.hasImportableMetadata = true,
-    this.hasPrompt = true,
-    this.hasSeed = true,
-    required this.isKritaConnected,
+    this.metadata = true,
+    this.krita = false,
+    this.watermark = false,
     this.sendOnly = false,
-    this.watermarkEnabled = false,
+    this.touch = false,
     this.position = const Offset(20, 20),
     this.safePadding = EdgeInsets.zero,
+    this.scale = 1,
     this.onSelected,
   });
-
-  final bool hasImportableMetadata;
-  final bool hasPrompt;
-  final bool hasSeed;
-  final bool isKritaConnected;
-  final bool sendOnly;
-  final bool watermarkEnabled;
+  final bool metadata, krita, watermark, sendOnly, touch;
   final Offset position;
   final EdgeInsets safePadding;
+  final double scale;
   final ValueChanged<LocalImageContextAction?>? onSelected;
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      locale: const Locale('en'),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(padding: safePadding),
+  Widget build(BuildContext context) => MaterialApp(
+    locale: const Locale('en'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) => InteractionPolicyScope(
+      initialPolicy: InteractionPolicy(
+        modality: touch
+            ? InteractionModality.touch
+            : InteractionModality.pointer,
+        touchAvailable: touch,
+        precisePointerAvailable: !touch,
+      ),
+      child: MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(padding: safePadding, textScaler: TextScaler.linear(scale)),
         child: child!,
       ),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () async {
-              final selected = sendOnly
-                  ? await LocalImageContextMenu.showSendActions(
-                      context,
-                      position: position,
-                      isKritaConnected: isKritaConnected,
-                      watermarkEnabled: watermarkEnabled,
-                    )
-                  : await LocalImageContextMenu.show(
-                      context,
-                      position: position,
-                      hasImportableMetadata: hasImportableMetadata,
-                      hasPrompt: hasPrompt,
-                      hasSeed: hasSeed,
-                      isKritaConnected: isKritaConnected,
-                      watermarkEnabled: watermarkEnabled,
-                    );
+    ),
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async {
+            if (sendOnly) {
+              await ImageCardContextMenu.show(
+                context: context,
+                position: position,
+                actions: LocalImageContextMenu.buildSendActions(
+                  context,
+                  onAction: (value) async => onSelected?.call(value),
+                  isKritaConnected: krita,
+                  watermarkEnabled: watermark,
+                ),
+              );
+            } else {
+              final selected = await LocalImageContextMenu.show(
+                context,
+                position: position,
+                hasImportableMetadata: metadata,
+                hasPrompt: metadata,
+                hasSeed: metadata,
+                isKritaConnected: krita,
+                watermarkEnabled: watermark,
+              );
               onSelected?.call(selected);
-            },
-            child: const Text('Open'),
-          ),
+            }
+          },
+          child: const Text('Open'),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

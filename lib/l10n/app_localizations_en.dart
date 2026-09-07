@@ -9,6 +9,23 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get cardAction_singleScope => 'This item only';
+
+  @override
+  String cardDrag_preparingCount(int count) {
+    return 'Preparing $count resources to drag…';
+  }
+
+  @override
+  String get cardDrop_unsupported =>
+      'This target does not support this resource set or item count. Use the matching resource import target.';
+
+  @override
+  String cardAction_batchFailed(int failed, int total) {
+    return '$failed of $total items failed';
+  }
+
+  @override
   String get generation_enhancementFailed =>
       'Enhancement failed; original retained';
 

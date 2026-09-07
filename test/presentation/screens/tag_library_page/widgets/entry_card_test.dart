@@ -109,7 +109,6 @@ void main() {
               height: 80,
               child: EntryCard(
                 entry: entry,
-                enableDrag: !isSelectionMode,
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: () {},
                 onTap: () {},
@@ -134,10 +133,7 @@ void main() {
     await pumpCard(isSelectionMode: true);
 
     expect(tester.state(find.byType(ThumbnailDisplay)), same(thumbnailState));
-    final draggable = tester.widget<Draggable<TagLibraryEntry>>(
-      find.byType(Draggable<TagLibraryEntry>),
-    );
-    expect(draggable.maxSimultaneousDrags, 0);
+    expect(find.byType(Draggable<TagLibraryEntry>), findsNothing);
   });
 
   testWidgets('词库卡片复用共享预览并在进入多选模式时清理', (tester) async {

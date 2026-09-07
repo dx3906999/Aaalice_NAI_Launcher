@@ -80,6 +80,8 @@ NAI Launcher is built for people who use NovelAI regularly. Generation, editing,
 - Batch categorization, favorites, moving, and deletion sit alongside comparison, slideshows, watermarks, redacted copies, and several viewing modes.
 - In Settings → Privacy & Sharing, independently enable "Add watermark when copying or dragging" to apply the saved default watermark to an output copy without changing the original. Adding a watermark does not remove metadata. To remove it, also enable Protection Mode and "Remove all metadata when copying or dragging"; metadata is removed before the watermark is added.
 - Desktop gets context menus, hover previews, and drag-and-drop; touch devices get equivalent menus instead of losing features.
+- Image and resource cards use consistent actions across context menus, More menus, and batch toolbars. Selected cards open batch actions; unselected cards act only on themselves. Desktop supports Ctrl/Cmd toggling, Shift range selection, and selecting the current page, with selection preserved across pages.
+- Dragging a selected card includes the entire selected set: actual images for image cards and portable resource files for Vibes, Bundles, and Precise References. In-app targets include compatible generation references, Agent, categories, and albums; single-item targets reject multiple items.
 - Local images can go directly to generation, Agent Chat, or Krita without repeated exports and file picking.
 
 ### 🔎 Online galleries and inspiration

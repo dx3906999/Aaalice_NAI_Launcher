@@ -1,3 +1,4 @@
+import '../../widgets/common/image_card_batch_scope.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -96,7 +97,14 @@ class _OnlineGalleryScreenState extends ConsumerState<OnlineGalleryScreen>
     );
     _gallerySubscription = ref.listenManual<OnlineGalleryState>(
       onlineGalleryNotifierProvider,
-      (_, next) => _handleGalleryStateChanged(next),
+      (previous, next) {
+        if (previous != null &&
+            (previous.currentCacheKey != next.currentCacheKey ||
+                previous.randomEnabled != next.randomEnabled)) {
+          _selectionNotifier.exit();
+        }
+        _handleGalleryStateChanged(next);
+      },
     );
     _controller.scrollController.addListener(_scrollCoordinator.onScroll);
     // 添加页码焦点监听
@@ -404,49 +412,56 @@ class _OnlineGalleryScreenState extends ConsumerState<OnlineGalleryScreen>
         _galleryNotifier.clearNotice();
       },
     );
-    return PopScope<void>(
-      canPop: !viewModel.isSelectionMode,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && viewModel.isSelectionMode) {
-          _selectionNotifier.exit();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: Column(
-          children: [
-            OnlineGalleryToolbarFeature(
-              controller: _controller,
-              data: OnlineGalleryToolbarViewData(
-                gallery: state,
-                danbooruAuth: authState,
-                gelbooruAuth: gelbooruAuthState,
-                selection: selectionState,
+    return ImageCardBatchScope(
+      targetIds: selectionState.selectedIds,
+      actions: _commands.selectionActions.buildActions(
+        state,
+        selectionState.selectedIds,
+      ),
+      child: PopScope<void>(
+        canPop: !viewModel.isSelectionMode,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && viewModel.isSelectionMode) {
+            _selectionNotifier.exit();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          body: Column(
+            children: [
+              OnlineGalleryToolbarFeature(
+                controller: _controller,
+                data: OnlineGalleryToolbarViewData(
+                  gallery: state,
+                  danbooruAuth: authState,
+                  gelbooruAuth: gelbooruAuthState,
+                  selection: selectionState,
+                ),
+                commands: OnlineGalleryToolbarCommands(
+                  gallery: _galleryNotifier,
+                  selection: _selectionNotifier,
+                  actions: _commands,
+                  saveScrollOffset: _scrollCoordinator.saveScrollOffset,
+                ),
               ),
-              commands: OnlineGalleryToolbarCommands(
-                gallery: _galleryNotifier,
-                selection: _selectionNotifier,
-                actions: _commands,
-                saveScrollOffset: _scrollCoordinator.saveScrollOffset,
+              // 图片网格
+              Expanded(
+                child: OnlineGalleryContent(
+                  state: state,
+                  controller: _controller,
+                  scrollCoordinator: _scrollCoordinator,
+                  commands: _commands,
+                ),
               ),
-            ),
-            // 图片网格
-            Expanded(
-              child: OnlineGalleryContent(
+              // 底部分页条
+              OnlineGalleryPagination(
                 state: state,
                 controller: _controller,
-                scrollCoordinator: _scrollCoordinator,
-                commands: _commands,
+                notifier: _galleryNotifier,
+                onGoToPage: _goToPage,
               ),
-            ),
-            // 底部分页条
-            OnlineGalleryPagination(
-              state: state,
-              controller: _controller,
-              notifier: _galleryNotifier,
-              onGoToPage: _goToPage,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

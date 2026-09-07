@@ -17,6 +17,7 @@ import '../../../../data/models/vibe/vibe_reference.dart';
 import '../../../../data/services/vibe_file_storage_service.dart';
 import '../../../../data/services/vibe_library_storage_service.dart';
 import '../../../adaptive/adaptive_presenter.dart';
+import '../../../utils/card_drop_reader.dart';
 import '../../../providers/image_generation_provider.dart';
 import '../../../providers/vibe_library_provider.dart';
 import '../../../widgets/common/app_toast.dart';
@@ -123,50 +124,55 @@ class VibeImportHandler {
     }
   }
 
-  /// 导入已经由拖拽读取到的单个 Vibe/图片文件。
-  ///
-  /// 用于局部 DropRegion，保留与“从文件添加”一致的延迟编码行为。
-  Future<int> importDroppedFile({
-    required String fileName,
-    required Uint8List bytes,
-  }) async {
-    final span = VibePerformanceDiagnostics.start(
-      'importHandler.importDroppedFile',
-      details: {'fileName': fileName},
-    );
-    var parsedVibes = 0;
-    var addedVibes = 0;
-    try {
-      final notifier = ref.read(generationParamsNotifierProvider.notifier);
-      final vibes = await VibeFileParser.parseFile(fileName, bytes);
-      parsedVibes = vibes.length;
-
-      final beforeCount = ref
-          .read(generationParamsNotifierProvider)
-          .vibeReferencesV4
-          .length;
-      notifier.addVibeReferences(vibes);
-      await notifier.saveGenerationState();
-
-      final afterCount = ref
-          .read(generationParamsNotifierProvider)
-          .vibeReferencesV4
-          .length;
-      if (afterCount > beforeCount) {
-        addedVibes = afterCount - beforeCount;
+  /// Resolve and validate the complete set before changing generation inputs.
+  Future<int> importDroppedResources(
+    List<CardDroppedResource> resources,
+  ) async {
+    final notifier = ref.read(generationParamsNotifierProvider.notifier);
+    final storage = ref.read(vibeLibraryStorageServiceProvider);
+    final groups = <({List<VibeReference> vibes, String? libraryId})>[];
+    for (final resource in resources) {
+      final entry = resource.vibe;
+      final List<VibeReference> vibes;
+      if (entry == null) {
+        final file = resource.image;
+        vibes = await VibeFileParser.parseFile(file.fileName, file.bytes);
+      } else if (entry.isBundle) {
+        final path = entry.filePath;
+        if (path == null) {
+          throw StateError('Vibe Bundle file is unavailable: ${entry.id}');
+        }
+        vibes = (await VibeFileStorageService().extractVibesFromBundle(path))
+            .map((vibe) => vibe.copyWith(bundleSource: entry.displayName))
+            .toList();
+        if (vibes.length != entry.bundledVibeCount) {
+          throw StateError('Vibe Bundle contents are incomplete: ${entry.id}');
+        }
+      } else {
+        vibes = [entry.toVibeReference()];
       }
-      return addedVibes;
-    } catch (e) {
-      AppLogger.e('Failed to parse dropped file: $fileName', e, null, _tag);
-      if (context.mounted) {
-        AppToast.error(context, context.l10n.vibe_import_fileParseFailed);
+      if (vibes.isEmpty) {
+        throw StateError('The dropped resource contains no Vibes');
       }
-      return 0;
-    } finally {
-      span.finish(
-        details: {'parsedVibes': parsedVibes, 'addedVibes': addedVibes},
+      groups.add((vibes: vibes, libraryId: entry?.id));
+    }
+    if (!context.mounted) return 0;
+    final all = groups.expand((group) => group.vibes).toList();
+    notifier.validateVibeReferenceBatch(all);
+    // No asynchronous gap between validation and applying the ordered groups.
+    for (final group in groups) {
+      notifier.addVibeReferences(
+        group.vibes,
+        recordUsage: group.libraryId == null,
       );
     }
+    await notifier.saveGenerationState();
+    for (final group in groups) {
+      if (group.libraryId != null) {
+        await storage.incrementUsedCount(group.libraryId!);
+      }
+    }
+    return all.length;
   }
 
   /// 从库导入 Vibes

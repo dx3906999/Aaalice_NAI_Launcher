@@ -1,3 +1,5 @@
+import '../../widgets/common/image_card_action.dart';
+import '../../widgets/common/image_card_batch_scope.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -83,6 +85,14 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final library = ref.watch(vibeLibraryNotifierProvider);
+    ref.listen(
+      vibeLibraryNotifierProvider.select(
+        (s) => (s.searchQuery, s.selectedCategoryId, s.favoritesOnly),
+      ),
+      (_, _) {
+        ref.read(vibeLibrarySelectionNotifierProvider.notifier).exit();
+      },
+    );
     final categories = ref.watch(vibeLibraryCategoryNotifierProvider);
     final selection = ref.watch(vibeLibrarySelectionNotifierProvider);
     final model = ref.watch(
@@ -96,43 +106,51 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
         ref.read(vibeLibraryCategoryNotifierProvider.notifier).clearError();
       },
     );
-    return PopScope<void>(
-      canPop: !selection.isActive,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && selection.isActive) {
-          ref.read(vibeLibrarySelectionNotifierProvider.notifier).exit();
-        }
-      },
-      child: Scaffold(
-        body: Shortcuts(
-          shortcuts: {
-            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyI):
-                const VibeImportIntent(),
-            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyE):
-                const VibeExportIntent(),
-          },
-          child: Actions(
-            actions: {
-              VibeImportIntent: CallbackAction<VibeImportIntent>(
-                onInvoke: (_) {
-                  if (!_controller.isBusy) unawaited(_imports.importFiles());
-                  return null;
-                },
-              ),
-              VibeExportIntent: CallbackAction<VibeExportIntent>(
-                onInvoke: (_) {
-                  if (library.entries.isNotEmpty) unawaited(_export());
-                  return null;
-                },
-              ),
+    return ImageCardBatchScope(
+      targetIds: selection.selectedIds,
+      actions: _buildBatchActions(selection.selectedIds, model),
+      child: PopScope<void>(
+        canPop: !selection.isActive,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && selection.isActive) {
+            ref.read(vibeLibrarySelectionNotifierProvider.notifier).exit();
+          }
+        },
+        child: Scaffold(
+          body: Shortcuts(
+            shortcuts: {
+              LogicalKeySet(
+                LogicalKeyboardKey.control,
+                LogicalKeyboardKey.keyI,
+              ): const VibeImportIntent(),
+              LogicalKeySet(
+                LogicalKeyboardKey.control,
+                LogicalKeyboardKey.keyE,
+              ): const VibeExportIntent(),
             },
-            child: VibeLibraryWorkspace(
-              libraryState: library,
-              categoryState: categories,
-              selectionState: selection,
-              currentModel: model,
-              controller: _controller,
-              onCommand: _handleCommand,
+            child: Actions(
+              actions: {
+                VibeImportIntent: CallbackAction<VibeImportIntent>(
+                  onInvoke: (_) {
+                    if (!_controller.isBusy) unawaited(_imports.importFiles());
+                    return null;
+                  },
+                ),
+                VibeExportIntent: CallbackAction<VibeExportIntent>(
+                  onInvoke: (_) {
+                    if (library.entries.isNotEmpty) unawaited(_export());
+                    return null;
+                  },
+                ),
+              },
+              child: VibeLibraryWorkspace(
+                libraryState: library,
+                categoryState: categories,
+                selectionState: selection,
+                currentModel: model,
+                controller: _controller,
+                onCommand: _handleCommand,
+              ),
             ),
           ),
         ),
@@ -140,39 +158,99 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     );
   }
 
-  void _handleCommand(VibeLibraryCommand command) {
+  List<ImageCardAction> _buildBatchActions(Set<String> ids, String model) {
+    final canMark =
+        ModelCapabilityRegistry.of(model).supportsVibeTransfer &&
+        NovelAiVibeCodec.normalizeModelOrNull(model) != null;
+    final theme = Theme.of(context);
+    return [
+      ImageCardAction(
+        id: ImageCardActionId.vibeTransfer,
+        supportsBatch: true,
+        icon: Icons.send,
+        label: context.l10n.vibeLibrary_sendToGeneration,
+        iconColor: theme.colorScheme.primary,
+        invoke: () => _sendSelection(ids),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.classify,
+        supportsBatch: true,
+        icon: Icons.drive_file_move_outline,
+        label: context.l10n.common_move,
+        iconColor: theme.colorScheme.secondary,
+        invoke: () => _moveSelection(ids),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.export,
+        supportsBatch: true,
+        icon: Icons.file_upload_outlined,
+        label: context.l10n.common_export,
+        iconColor: theme.colorScheme.secondary,
+        invoke: () => _exportSelection(ids),
+      ),
+      ImageCardAction(
+        id: ImageCardActionId.favorite,
+        supportsBatch: true,
+        icon: Icons.favorite_border,
+        label: context.l10n.common_favorite,
+        iconColor: theme.colorScheme.primary,
+        invoke: () => _toggleFavorites(ids),
+      ),
+      if (canMark)
+        ImageCardAction(
+          id: ImageCardActionId.markEncodingModel,
+          supportsBatch: true,
+          icon: Icons.model_training_outlined,
+          label: context.l10n.vibeLibrary_markEncodingModel,
+          iconColor: theme.colorScheme.secondary,
+          isLoading: _controller.isMarkingEncodingModel,
+          invoke: () => _markEncodingModel(ids),
+        ),
+      ImageCardAction(
+        id: ImageCardActionId.delete,
+        supportsBatch: true,
+        icon: Icons.delete_forever_outlined,
+        label: context.l10n.common_delete,
+        iconColor: theme.colorScheme.error,
+        isDanger: true,
+        invoke: () => _deleteSelection(ids),
+      ),
+    ];
+  }
+
+  Future<void> _handleCommand(VibeLibraryCommand command) async {
     final library = ref.read(vibeLibraryNotifierProvider.notifier);
     final selection = ref.read(vibeLibrarySelectionNotifierProvider.notifier);
     final categories = ref.read(vibeLibraryCategoryNotifierProvider.notifier);
     switch (command) {
       case ImportVibesCommand():
-        unawaited(_imports.importFiles());
+        await _imports.importFiles();
       case ImportImagesCommand():
-        unawaited(_imports.importImages());
+        await _imports.importImages();
       case ImportClipboardCommand():
-        unawaited(_imports.importClipboard());
+        await _imports.importClipboard();
       case PerformVibeDropCommand(:final event):
-        unawaited(_imports.importDrop(event));
+        await _imports.importDrop(event);
       case ShowImportMenuCommand(:final position):
         _showImportMenu(position);
       case ExportVibesCommand(:final entries):
-        unawaited(_export(entries));
+        await _export(entries);
       case OpenLibraryFolderCommand():
-        unawaited(_openFolder());
+        await _openFolder();
       case RefreshLibraryCommand():
-        unawaited(library.reload(syncFileSystem: true, showLoading: true));
+        await library.reload(syncFileSystem: true, showLoading: true);
       case ToggleCategoryPanelCommand():
         _controller.toggleCategoryPanel();
       case ShowCategoryPanelCommand():
-        unawaited(_showCategoryPanel());
+        await _showCategoryPanel();
       case SelectCategoryCommand(:final categoryId):
         _selectCategory(categoryId);
       case CreateCategoryCommand():
-        unawaited(_createCategory());
+        await _createCategory();
       case RenameCategoryCommand(:final categoryId, :final name):
-        unawaited(categories.renameCategory(categoryId, name));
+        await categories.renameCategory(categoryId, name);
       case DeleteCategoryCommand(:final categoryId):
-        unawaited(_deleteCategory(categoryId));
+        await _deleteCategory(categoryId);
       case EnterSelectionModeCommand():
         selection.enter();
       case ExitSelectionModeCommand():
@@ -185,25 +263,25 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
             .toList();
         select ? selection.selectAll(ids) : selection.deselectAll(ids);
       case ChangeSortCommand(:final order):
-        unawaited(library.setSortOrder(order));
+        await library.setSortOrder(order);
       case ChangePageSizeCommand(:final size):
-        unawaited(library.setPageSize(size));
+        await library.setPageSize(size);
       case ChangePageCommand(:final page):
-        unawaited(library.loadPage(page));
+        await library.loadPage(page);
       case SendSelectionToGenerationCommand():
-        unawaited(_sendSelection());
+        await _sendSelection();
       case MoveSelectionCommand():
-        unawaited(_moveSelection());
+        await _moveSelection();
       case ExportSelectionCommand():
-        unawaited(_exportSelection());
+        await _exportSelection();
       case ToggleSelectionFavoriteCommand():
-        unawaited(_toggleFavorites());
+        await _toggleFavorites();
       case MarkSelectionEncodingModelCommand():
-        unawaited(_markEncodingModel());
+        await _markEncodingModel();
       case DeleteSelectionCommand():
-        unawaited(_deleteSelection());
+        await _deleteSelection();
       case ClassifyVibeEntryCommand(:final entryId, :final categoryId):
-        unawaited(library.updateEntryCategory(entryId, categoryId));
+        await library.updateEntryCategory(entryId, categoryId);
       case FavoriteVibeEntryCommand(:final entryId):
         final entry = ref
             .read(vibeLibraryNotifierProvider)
@@ -211,7 +289,7 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
             .cast<VibeLibraryEntry?>()
             .firstWhere((item) => item?.id == entryId, orElse: () => null);
         if (entry != null && !entry.isFavorite) {
-          unawaited(library.toggleFavorite(entryId));
+          await library.toggleFavorite(entryId);
         }
     }
   }
@@ -298,7 +376,8 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
   Set<String> get _selectedIds =>
       ref.read(vibeLibrarySelectionNotifierProvider).selectedIds;
 
-  Future<void> _moveSelection() async {
+  Future<void> _moveSelection([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
     final categories = ref.read(vibeLibraryCategoryNotifierProvider).categories;
     if (categories.isEmpty) {
       AppToast.warning(context, context.l10n.vibeLibrary_noCategoriesAvailable);
@@ -311,7 +390,7 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     final count = await ref
         .read(vibeLibraryNotifierProvider.notifier)
         .bulkMoveToCategory(
-          _selectedIds.toList(),
+          selectedIds.toList(),
           destination.isEmpty ? null : destination,
         );
     if (!mounted) return;
@@ -322,8 +401,9 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     );
   }
 
-  Future<void> _toggleFavorites() async {
-    for (final id in _selectedIds) {
+  Future<void> _toggleFavorites([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
+    for (final id in selectedIds) {
       await ref.read(vibeLibraryNotifierProvider.notifier).toggleFavorite(id);
     }
     if (mounted) {
@@ -332,8 +412,9 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     }
   }
 
-  Future<void> _markEncodingModel() async {
-    if (_controller.isMarkingEncodingModel || _selectedIds.isEmpty) return;
+  Future<void> _markEncodingModel([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
+    if (_controller.isMarkingEncodingModel || selectedIds.isEmpty) return;
     final model = NovelAiVibeCodec.normalizeModelOrNull(
       ref.read(generationParamsNotifierProvider).model,
     );
@@ -348,7 +429,7 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
           context: context,
           title: context.l10n.vibeLibrary_markEncodingModel,
           content: context.l10n.vibeLibrary_markEncodingModelContent(
-            _selectedIds.length,
+            selectedIds.length,
             ImageModels.modelDisplayNames[model] ?? model,
           ),
           confirmText: context.l10n.common_confirm,
@@ -358,7 +439,7 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
       if (confirmed == true) {
         final result = await ref
             .read(vibeLibraryNotifierProvider.notifier)
-            .bulkUpdateEncodingModel(_selectedIds, model);
+            .bulkUpdateEncodingModel(selectedIds, model);
         if (mounted) {
           ref.read(vibeLibrarySelectionNotifierProvider.notifier).exit();
           AppToast.success(
@@ -372,8 +453,9 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     }
   }
 
-  Future<void> _sendSelection() async {
-    final ids = _selectedIds.toList();
+  Future<void> _sendSelection([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
+    final ids = selectedIds.toList();
     if (ids.isEmpty) return;
     if (ids.length > 16) {
       await _showVibeLimitDialog(
@@ -422,8 +504,9 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     );
   }
 
-  Future<void> _exportSelection() async {
-    final ids = _selectedIds.toList();
+  Future<void> _exportSelection([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
+    final ids = selectedIds.toList();
     if (ids.isEmpty) return;
     final entriesById = {
       for (final entry in ref.read(vibeLibraryNotifierProvider).entries)
@@ -438,8 +521,9 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
     if (mounted) ref.read(vibeLibrarySelectionNotifierProvider.notifier).exit();
   }
 
-  Future<void> _deleteSelection() async {
-    final ids = _selectedIds.toList();
+  Future<void> _deleteSelection([Set<String>? targets]) async {
+    final selectedIds = Set<String>.of(targets ?? _selectedIds);
+    final ids = selectedIds.toList();
     final confirmed = await _controller.runDialogLocked(
       () => ThemedConfirmDialog.show(
         context: context,

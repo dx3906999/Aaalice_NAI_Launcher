@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'image_card_action.dart';
+import 'image_card_action_dispatch.dart';
+import 'image_card_action_region.dart';
+import 'image_card_context_menu.dart';
+
 import '../../../l10n/app_localizations.dart';
-import '../../adaptive/adaptive_presenter.dart';
 import '../../adaptive/interaction_policy.dart';
 
 /// 图像明暗不可预测，覆盖操作统一使用半透明暗色面与亮色前景，避免主题色
@@ -50,35 +55,17 @@ abstract final class ImageOverlayControlStyle {
   }
 }
 
-/// 卡片操作按钮配置
-class CardActionButtonConfig {
-  final Key? key;
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-  final Color? iconColor;
-  final String? semanticLabel;
-  final bool enabled;
-  final bool isLoading;
-
-  const CardActionButtonConfig({
-    this.key,
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    this.iconColor,
-    this.semanticLabel,
-    this.enabled = true,
-    this.isLoading = false,
-  });
-}
-
 /// 卡片操作按钮组。高频悬浮操作必须即时响应，不做延迟或出现动画。
 class CardActionButtons extends StatelessWidget {
-  final List<CardActionButtonConfig> buttons;
+  final List<ImageCardAction> buttons;
   final bool visible;
   final Axis direction;
   final Size? availableSize;
+  final Set<ImageCardActionId> touchShortcuts;
+  final Axis touchDirection;
+  final Key? menuKey;
+  final double pointerExtent;
+  final Map<ImageCardActionGroup, ({IconData icon, String label})> groupMenus;
 
   const CardActionButtons({
     super.key,
@@ -86,19 +73,28 @@ class CardActionButtons extends StatelessWidget {
     required this.visible,
     this.direction = Axis.horizontal,
     this.availableSize,
+    this.touchShortcuts = const {},
+    this.touchDirection = Axis.vertical,
+    this.menuKey,
+    this.pointerExtent = 32,
+    this.groupMenus = const {},
   });
 
   @override
   Widget build(BuildContext context) {
-    if (buttons.isEmpty) return const SizedBox.shrink();
+    if (this.buttons.isEmpty) return const SizedBox.shrink();
 
+    final buttons = this.buttons
+        .where((a) => a.visible && a.showOnHover)
+        .toList();
     final interactionPolicy = context.interactionPolicy;
     final loadingLabel =
         AppLocalizations.of(context)?.common_loading ?? 'Loading…';
 
     if (interactionPolicy.usesTouchActionMenu) {
       final extent = interactionPolicy.minimumControlExtent;
-      return IconButton(
+      final more = IconButton(
+        key: menuKey,
         tooltip:
             AppLocalizations.of(context)?.common_moreActions ??
             MaterialLocalizations.of(context).showMenuTooltip,
@@ -106,6 +102,19 @@ class CardActionButtons extends StatelessWidget {
         constraints: BoxConstraints.tightFor(width: extent, height: extent),
         style: ImageOverlayControlStyle.iconButton(context, extent: extent),
         icon: const Icon(Icons.more_vert_rounded),
+      );
+      final shortcuts = this.buttons.where(
+        (a) => a.visible && touchShortcuts.contains(a.id),
+      );
+      if (shortcuts.isEmpty) return more;
+      return Flex(
+        direction: touchDirection,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final action in shortcuts)
+            _CardActionButton(config: action, extent: extent),
+          more,
+        ],
       );
     }
 
@@ -118,27 +127,38 @@ class CardActionButtons extends StatelessWidget {
     // stable touch target once a touch device has been observed.
     final extent = interactionPolicy.touchAvailable
         ? interactionPolicy.minimumControlExtent
-        : 32.0;
+        : pointerExtent;
     final size = availableSize;
     final columns = size == null
         ? 2
         : ((size.width + 4) / (extent + 4)).floor().clamp(1, 2).toInt();
+    final allWidgets = <Widget>[
+      for (final button in buttons.where((a) => !a.isDanger))
+        _CardActionButton(config: button, extent: extent),
+      for (final group in groupMenus.entries)
+        if (this.buttons.any((a) => a.visible && a.group == group.key))
+          _CardOverflowButton(
+            buttons: this.buttons
+                .where((a) => a.visible && a.group == group.key)
+                .toList(),
+            extent: extent,
+            icon: group.value.icon,
+            label: group.value.label,
+          ),
+      for (final button in buttons.where((a) => a.isDanger))
+        _CardActionButton(config: button, extent: extent),
+    ];
     final capacity = size == null
-        ? buttons.length
+        ? allWidgets.length
         : columns *
               math.max(1, ((size.height + 4) / (extent + 4)).floor()).toInt();
-    final directCount = direction == Axis.vertical && buttons.length > capacity
-        ? capacity - 1
-        : buttons.length;
-    final actionWidgets = [
-      for (final button in buttons.take(directCount))
-        _CardActionButton(config: button, extent: extent),
-      if (directCount < buttons.length)
-        _CardOverflowButton(
-          buttons: buttons.sublist(directCount),
-          extent: extent,
-        ),
-    ];
+    final actionWidgets =
+        direction == Axis.vertical && allWidgets.length > capacity
+        ? <Widget>[
+            ...allWidgets.take(capacity - 1),
+            _CardOverflowButton(buttons: this.buttons, extent: extent),
+          ]
+        : allWidgets;
 
     // Keep pointer actions along the edge in at most two balanced columns,
     // instead of extending more columns over the image subject.
@@ -181,112 +201,64 @@ class CardActionButtons extends StatelessWidget {
     );
   }
 
-  Future<void> _showTouchActions(
-    BuildContext context,
-    String loadingLabel,
-  ) async {
-    final title =
-        AppLocalizations.of(context)?.common_moreActions ??
-        MaterialLocalizations.of(context).showMenuTooltip;
-    final selection = await AdaptivePresenter.showPanel<CardActionButtonConfig>(
+  Future<void> _showTouchActions(BuildContext context, String loadingLabel) {
+    final scope = ImageCardActionPresentationScope.maybeOf(context);
+    scope?.onMenuOpened?.call();
+    return ImageCardContextMenu.show(
       context: context,
-      title: title,
-      initialChildSize: 0.66,
-      builder: (panelContext, scrollController) {
-        final reducedMotion = MediaQuery.disableAnimationsOf(panelContext);
-        return ListView.separated(
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-          itemCount: buttons.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 4),
-          itemBuilder: (context, index) {
-            final button = buttons[index];
-            final canActivate = button.enabled && !button.isLoading;
-            return ListTile(
-              enabled: canActivate,
-              leading: button.isLoading
-                  ? SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        value: reducedMotion ? 0.72 : null,
-                      ),
-                    )
-                  : Icon(button.icon, color: button.iconColor),
-              title: Text(button.tooltip),
-              subtitle: button.isLoading ? Text(loadingLabel) : null,
-              onTap: canActivate
-                  ? () => Navigator.of(panelContext).pop(button)
-                  : null,
-            );
-          },
-        );
-      },
+      position: Offset.zero,
+      actions: scope?.menuActions ?? buttons,
+      title: scope?.menuTitle,
+      listenable: scope?.menuRunner ?? scope?.runner,
     );
-    selection?.onPressed();
   }
 }
 
 class _CardOverflowButton extends StatelessWidget {
-  const _CardOverflowButton({required this.buttons, required this.extent});
-  final List<CardActionButtonConfig> buttons;
+  const _CardOverflowButton({
+    required this.buttons,
+    required this.extent,
+    this.icon,
+    this.label,
+  });
+  final List<ImageCardAction> buttons;
   final double extent;
+  final IconData? icon;
+  final String? label;
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: extent,
     child: IconButton(
       tooltip:
+          label ??
           AppLocalizations.of(context)?.common_moreActions ??
           MaterialLocalizations.of(context).showMenuTooltip,
       padding: EdgeInsets.zero,
       style: ImageOverlayControlStyle.iconButton(context, extent: extent),
-      icon: const Icon(Icons.more_horiz_rounded, size: 16),
+      icon: Icon(icon ?? Icons.more_horiz_rounded, size: 16),
       onPressed: () => _showMenu(context),
     ),
   );
 
   Future<void> _showMenu(BuildContext context) async {
     final anchor = context.findRenderObject()! as RenderBox;
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    // Hover controls can unmount while the pointer travels into the menu.
-    // Keep the selected action independent of the trigger's widget lifetime.
-    final selected = await showMenu<CardActionButtonConfig>(
+    final scope = ImageCardActionPresentationScope.maybeOf(context);
+    scope?.onMenuOpened?.call();
+    await ImageCardContextMenu.show(
       context: context,
-      position: RelativeRect.fromRect(
-        anchor.localToGlobal(Offset.zero, ancestor: overlay) & anchor.size,
-        Offset.zero & overlay.size,
-      ),
-      items: [
-        for (final button in buttons)
-          PopupMenuItem(
-            value: button,
-            enabled: button.enabled && !button.isLoading,
-            child: Row(
-              children: [
-                Icon(
-                  button.icon,
-                  color: button.iconColor == Colors.white
-                      ? null
-                      : button.iconColor,
-                  size: 18,
-                ),
-                const SizedBox(width: 12),
-                Flexible(child: Text(button.tooltip)),
-              ],
-            ),
-          ),
-      ],
+      position: anchor.localToGlobal(Offset.zero),
+      actions: scope?.menuActions ?? buttons,
+      title: scope?.menuTitle,
+      listenable: scope?.menuRunner ?? scope?.runner,
     );
-    selected?.onPressed();
   }
 }
 
 class _CardActionButton extends StatelessWidget {
   const _CardActionButton({required this.config, required this.extent});
 
-  final CardActionButtonConfig config;
+  final ImageCardAction config;
   final double extent;
 
   @override
@@ -298,14 +270,16 @@ class _CardActionButton extends StatelessWidget {
       enabled: canActivate,
       liveRegion: config.isLoading,
       label: config.isLoading
-          ? '${config.semanticLabel ?? config.tooltip}, '
+          ? '${config.semanticLabel ?? config.label}, '
                 '${AppLocalizations.of(context)?.common_loading ?? 'Loading…'}'
-          : config.semanticLabel ?? config.tooltip,
+          : config.semanticLabel ?? config.label,
       child: ExcludeSemantics(
         child: IconButton(
           key: config.key,
-          tooltip: config.tooltip,
-          onPressed: canActivate ? config.onPressed : null,
+          tooltip: config.label,
+          onPressed: canActivate
+              ? () => unawaited(dispatchImageCardAction(context, config))
+              : null,
           constraints: BoxConstraints.tightFor(width: extent, height: extent),
           style: ImageOverlayControlStyle.iconButton(
             context,
