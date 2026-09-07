@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,60 @@ const _pane = ValueKey('gallery-resizable-sidebar');
 const _handle = ValueKey('gallery-sidebar-resize-handle');
 const _storageKey = StorageKeys.localGallerySidebarWidth;
 
+Color _handleBackground(WidgetTester tester) => tester
+    .widget<ColoredBox>(
+      find
+          .ancestor(of: find.byKey(_handle), matching: find.byType(ColoredBox))
+          .first,
+    )
+    .color;
+
 void main() {
+  for (final storageKey in [
+    StorageKeys.localGallerySidebarWidth,
+    StorageKeys.vibeLibrarySidebarWidth,
+    StorageKeys.preciseRefSidebarWidth,
+    StorageKeys.tagLibrarySidebarWidth,
+  ]) {
+    for (final cancel in [false, true]) {
+      testWidgets(
+        '$storageKey clears pointer focus highlight (cancel: $cancel)',
+        (tester) async {
+          final storage = _Storage();
+          await tester.binding.setSurfaceSize(const Size(1180, 700));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          await tester.pumpWidget(_app(storage, storageKey: storageKey));
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pumpAndSettle();
+          expect(_handleBackground(tester), isNot(Colors.transparent));
+          final gesture = await tester.startGesture(
+            tester.getCenter(find.byKey(_handle)),
+            kind: PointerDeviceKind.mouse,
+          );
+          await gesture.moveBy(const Offset(40, 0));
+          await tester.pump();
+          await gesture.moveBy(const Offset(20, 0));
+          await tester.pump();
+          if (cancel) {
+            await gesture.cancel();
+          } else {
+            await gesture.up();
+          }
+          await tester.pumpAndSettle();
+          expect(_handleBackground(tester), Colors.transparent);
+          final width = tester.getSize(find.byKey(_pane)).width;
+          expect(width, greaterThan(250));
+          expect(storage.values[storageKey], width);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          await tester.pumpAndSettle();
+          expect(tester.getSize(find.byKey(_pane)).width, width - 16);
+          expect(_handleBackground(tester), isNot(Colors.transparent));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets(
     'drag relayouts stable children and persists only after release',
     (tester) async {
@@ -171,6 +225,7 @@ Widget _app(
   Widget? body,
   double textScale = 1,
   bool touch = false,
+  String storageKey = _storageKey,
 }) => ProviderScope(
   overrides: [localStorageServiceProvider.overrideWithValue(storage)],
   child: MaterialApp(
@@ -194,7 +249,7 @@ Widget _app(
     home: Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) => GalleryCollectionWorkspace(
-          sidebarWidthKey: _storageKey,
+          sidebarWidthKey: storageKey,
           toolbar: const SizedBox(height: 72),
           sidebar: constraints.maxWidth >= 840
               ? sidebar ?? const GallerySidebarSurface(child: SizedBox.expand())

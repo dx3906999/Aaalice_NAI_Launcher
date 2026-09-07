@@ -134,7 +134,7 @@ class _ResizableGallerySidebarState
             child: Tooltip(
               message: context.l10n.gallery_resizeSidebar,
               child: ColoredBox(
-                color: _focused
+                color: _focused && policy.keyboardNavigationActive
                     ? Theme.of(
                         context,
                       ).colorScheme.primary.withValues(alpha: 0.08)
