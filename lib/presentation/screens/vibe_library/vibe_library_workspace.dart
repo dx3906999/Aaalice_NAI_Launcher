@@ -1,6 +1,7 @@
 import '../../widgets/common/image_card_batch_scope.dart';
 import '../../utils/card_drop_reader.dart';
 import 'package:flutter/material.dart';
+import '../../../core/constants/storage_keys.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../data/models/vibe/vibe_import_progress.dart';
@@ -44,24 +45,13 @@ class VibeLibraryWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const categoryPanelWidth = GalleryCollectionChrome.sidebarWidth;
         final persistent = constraints.maxWidth >= 1000;
         final showCategories = controller.showCategoryPanel && persistent;
-        final contentWidth =
-            constraints.maxWidth - (showCategories ? categoryPanelWidth : 0);
-        const gridPadding = 32.0;
-        final gridWidth = (contentWidth - gridPadding).clamp(
-          0.0,
-          double.infinity,
-        );
-        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final gridLayout = computeVibeLibraryGridLayout(gridWidth, textScale);
-        final columns = gridLayout.columns;
-        final itemWidth = gridLayout.itemWidth;
 
         final content = Stack(
           children: [
             GalleryCollectionWorkspace(
+              sidebarWidthKey: StorageKeys.vibeLibrarySidebarWidth,
               toolbar: _Toolbar(
                 libraryState: libraryState,
                 selectionState: selectionState,
@@ -79,35 +69,51 @@ class VibeLibraryWorkspace extends StatelessWidget {
                       onCommand: onCommand,
                     )
                   : null,
-              body: _Body(
-                state: libraryState,
-                columns: columns,
-                itemWidth: itemWidth,
-                onCommand: onCommand,
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final gridWidth = (constraints.maxWidth - 32).clamp(
+                    0.0,
+                    double.infinity,
+                  );
+                  final textScale =
+                      MediaQuery.textScalerOf(context).scale(14) / 14;
+                  final layout = computeVibeLibraryGridLayout(
+                    gridWidth,
+                    textScale,
+                  );
+                  return _Body(
+                    state: libraryState,
+                    columns: layout.columns,
+                    itemWidth: layout.itemWidth,
+                    onCommand: onCommand,
+                  );
+                },
               ),
               footer:
                   !libraryState.isLoading &&
                       libraryState.filteredEntries.isNotEmpty &&
                       libraryState.totalPages > 0
-                  ? PaginationBar(
-                      currentPage: libraryState.currentPage,
-                      totalPages: libraryState.totalPages,
-                      totalItems: libraryState.filteredCount,
-                      itemsPerPage: libraryState.pageSize,
-                      itemsPerPageOptions: const [20, 50, 100],
-                      onPageChanged: (page) =>
-                          onCommand(ChangePageCommand(page)),
-                      onItemsPerPageChanged: (size) =>
-                          onCommand(ChangePageSizeCommand(size)),
-                      showItemsPerPage: true,
-                      showTotalInfo: true,
-                      compact: contentWidth < 680,
-                      loading: libraryState.isLoading,
-                      totalIcon: Icons.auto_awesome_outlined,
-                      totalItemsLabel: context.l10n.vibeLibrary_totalCount(
-                        libraryState.filteredCount.toString(),
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => PaginationBar(
+                        currentPage: libraryState.currentPage,
+                        totalPages: libraryState.totalPages,
+                        totalItems: libraryState.filteredCount,
+                        itemsPerPage: libraryState.pageSize,
+                        itemsPerPageOptions: const [20, 50, 100],
+                        onPageChanged: (page) =>
+                            onCommand(ChangePageCommand(page)),
+                        onItemsPerPageChanged: (size) =>
+                            onCommand(ChangePageSizeCommand(size)),
+                        showItemsPerPage: true,
+                        showTotalInfo: true,
+                        compact: constraints.maxWidth < 680,
+                        loading: libraryState.isLoading,
+                        totalIcon: Icons.auto_awesome_outlined,
+                        totalItemsLabel: context.l10n.vibeLibrary_totalCount(
+                          libraryState.filteredCount.toString(),
+                        ),
+                        tonalCard: true,
                       ),
-                      tonalCard: true,
                     )
                   : null,
             ),

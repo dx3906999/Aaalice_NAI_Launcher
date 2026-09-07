@@ -1,4 +1,5 @@
 {
+  "gallery_resizeSidebar": "拖动调整侧栏宽度；方向键微调，Home 恢复默认宽度",
   "cardAction_singleScope": "仅此项",
   "cardDrag_preparingCount": "正在准备 {count} 项拖出资源…",
   "@cardDrag_preparingCount": {

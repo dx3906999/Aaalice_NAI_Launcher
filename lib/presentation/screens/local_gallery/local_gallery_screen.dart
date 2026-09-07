@@ -4,6 +4,7 @@ import '../../selection/card_selection_scope.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/constants/storage_keys.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/cache/local_gallery_thumbnail_provider.dart';
@@ -240,6 +241,7 @@ class _LocalGalleryShell extends ConsumerWidget {
     final gallery = viewModel.gallery;
     return Scaffold(
       body: GalleryCollectionWorkspace(
+        sidebarWidthKey: StorageKeys.localGallerySidebarWidth,
         toolbar: _buildToolbar(context, ref),
         sidebar: viewModel.showPersistentCategories
             ? controller.buildCategoryPanel(

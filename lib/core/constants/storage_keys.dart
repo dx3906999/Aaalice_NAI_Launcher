@@ -65,6 +65,11 @@ class StorageKeys {
   // UI Layout State Keys (UI布局状态)
   static const String leftPanelExpanded = 'left_panel_expanded';
   static const String rightPanelExpanded = 'right_panel_expanded';
+  // Sidebar geometry belongs to this device and is absent from the sync allowlist.
+  static const String localGallerySidebarWidth = 'local_gallery_sidebar_width';
+  static const String vibeLibrarySidebarWidth = 'vibe_library_sidebar_width';
+  static const String preciseRefSidebarWidth = 'precise_ref_sidebar_width';
+  static const String tagLibrarySidebarWidth = 'tag_library_sidebar_width';
   static const String leftPanelWidth = 'left_panel_width';
   static const String promptAreaHeight = 'prompt_area_height';
 

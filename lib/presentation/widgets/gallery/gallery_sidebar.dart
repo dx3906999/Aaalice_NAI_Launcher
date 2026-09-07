@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'resizable_gallery_sidebar.dart';
+
 import '../../../core/utils/localization_extension.dart';
 import '../../adaptive/interaction_policy.dart';
 import '../common/library_classification_drag.dart';
@@ -153,12 +155,14 @@ class GalleryCollectionWorkspace extends StatelessWidget {
     required this.toolbar,
     required this.body,
     this.sidebar,
+    this.sidebarWidthKey,
     this.footer,
   });
 
   final Widget toolbar;
   final Widget body;
   final Widget? sidebar;
+  final String? sidebarWidthKey;
   final Widget? footer;
 
   @override
@@ -167,18 +171,30 @@ class GalleryCollectionWorkspace extends StatelessWidget {
       children: [
         toolbar,
         Expanded(
-          child: Row(
-            children: [
-              if (sidebar != null) sidebar!,
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(child: body),
-                    if (footer != null) footer!,
-                  ],
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                if (sidebar != null)
+                  if (sidebarWidthKey != null)
+                    ResizableGallerySidebar(
+                      key: ValueKey(sidebarWidthKey),
+                      storageKey: sidebarWidthKey!,
+                      initialWidth: GalleryCollectionChrome.sidebarWidth,
+                      workspaceWidth: constraints.maxWidth,
+                      child: sidebar!,
+                    )
+                  else
+                    sidebar!,
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: body),
+                      if (footer != null) footer!,
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],

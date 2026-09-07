@@ -1,4 +1,5 @@
 {
+  "gallery_resizeSidebar": "Drag to resize the sidebar; use arrow keys to adjust and Home to reset",
   "cardAction_singleScope": "This item only",
   "cardDrag_preparingCount": "Preparing {count} resources to drag…",
   "@cardDrag_preparingCount": {

@@ -9,6 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get gallery_resizeSidebar =>
+      'Drag to resize the sidebar; use arrow keys to adjust and Home to reset';
+
+  @override
   String get cardAction_singleScope => 'This item only';
 
   @override

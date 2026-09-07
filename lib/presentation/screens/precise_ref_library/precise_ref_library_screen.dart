@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../../core/constants/storage_keys.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nai_launcher/core/utils/localization_extension.dart';
@@ -602,12 +603,10 @@ class _PreciseRefLibraryScreenState
       builder: (context, constraints) {
         final persistentCategories = constraints.maxWidth >= 840;
         final showSidebar = persistentCategories && _showCategoryPanel;
-        final mainWidth = constraints.maxWidth - (showSidebar ? 250 : 0);
-        final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final layout = computePreciseRefGridLayout(mainWidth, textScale);
         return Stack(
           children: [
             GalleryCollectionWorkspace(
+              sidebarWidthKey: StorageKeys.preciseRefSidebarWidth,
               toolbar: _buildToolbar(
                 state,
                 selection: selection,
@@ -634,9 +633,20 @@ class _PreciseRefLibraryScreenState
                   ? _buildErrorView(state.error!)
                   : state.filteredEntries.isEmpty
                   ? _buildEmptyView(state)
-                  : _buildGrid(state, layout),
+                  : LayoutBuilder(
+                      builder: (context, constraints) => _buildGrid(
+                        state,
+                        computePreciseRefGridLayout(
+                          constraints.maxWidth,
+                          MediaQuery.textScalerOf(context).scale(14) / 14,
+                        ),
+                      ),
+                    ),
               footer: !state.isLoading && state.filteredEntries.isNotEmpty
-                  ? _buildPagination(state, mainWidth)
+                  ? LayoutBuilder(
+                      builder: (context, constraints) =>
+                          _buildPagination(state, constraints.maxWidth),
+                    )
                   : null,
             ),
             if (_isDragging) _buildDropOverlay(),

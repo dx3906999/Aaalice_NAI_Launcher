@@ -48,6 +48,7 @@ class _ResizeHandleState extends State<ResizeHandle> {
         onHorizontalDragEnd: widget.onDragEnd != null
             ? (_) => widget.onDragEnd!()
             : null,
+        onHorizontalDragCancel: widget.onDragEnd,
         onHorizontalDragUpdate: (details) {
           final delta = details.primaryDelta ?? details.delta.dx;
           if (delta != 0) widget.onDrag(delta);

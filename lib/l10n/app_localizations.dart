@@ -101,6 +101,12 @@ abstract class AppLocalizations {
     Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
+  /// No description provided for @gallery_resizeSidebar.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to resize the sidebar; use arrow keys to adjust and Home to reset'**
+  String get gallery_resizeSidebar;
+
   /// No description provided for @cardAction_singleScope.
   ///
   /// In en, this message translates to:

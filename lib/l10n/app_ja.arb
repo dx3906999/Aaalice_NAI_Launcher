@@ -1,4 +1,5 @@
 {
+  "gallery_resizeSidebar": "ドラッグでサイドバーの幅を変更。矢印キーで微調整、Home で初期幅に戻す",
   "cardAction_singleScope": "この項目のみ",
   "cardDrag_preparingCount": "{count} 件のドラッグ用リソースを準備中…",
   "@cardDrag_preparingCount": {

@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get gallery_resizeSidebar => '拖动调整侧栏宽度；方向键微调，Home 恢复默认宽度';
+
+  @override
   String get cardAction_singleScope => '仅此项';
 
   @override
@@ -14577,6 +14580,9 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, using the Han script (`zh_Hant`).
 class AppLocalizationsZhHant extends AppLocalizationsZh {
   AppLocalizationsZhHant() : super('zh_Hant');
+
+  @override
+  String get gallery_resizeSidebar => '拖曳調整側欄寬度；方向鍵微調，Home 恢復預設寬度';
 
   @override
   String get cardAction_singleScope => '僅此項';

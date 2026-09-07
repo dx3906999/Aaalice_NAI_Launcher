@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get gallery_resizeSidebar => 'ドラッグでサイドバーの幅を変更。矢印キーで微調整、Home で初期幅に戻す';
+
+  @override
   String get cardAction_singleScope => 'この項目のみ';
 
   @override

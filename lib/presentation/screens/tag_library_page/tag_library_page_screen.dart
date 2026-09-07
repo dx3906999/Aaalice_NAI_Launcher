@@ -2,6 +2,7 @@ import '../../selection/card_selection_scope.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../core/constants/storage_keys.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -173,6 +174,7 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
                   final showSidebar =
                       persistentCategories && _showCategoryPanel;
                   return GalleryCollectionWorkspace(
+                    sidebarWidthKey: StorageKeys.tagLibrarySidebarWidth,
                     toolbar: TagLibraryToolbar(
                       showPageTitle: true,
                       showCategoryPanel: showSidebar,
