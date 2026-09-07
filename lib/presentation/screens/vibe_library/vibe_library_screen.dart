@@ -1,6 +1,7 @@
 import '../../widgets/common/image_card_action.dart';
 import '../../widgets/common/image_card_batch_scope.dart';
 import 'dart:async';
+import '../../services/library_sidebar_move_service.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -312,6 +313,10 @@ class _VibeLibraryScreenState extends ConsumerState<VibeLibraryScreen> {
         final library = panelRef.watch(vibeLibraryNotifierProvider);
         final categories = panelRef.watch(vibeLibraryCategoryNotifierProvider);
         return VibeCategoryTreeView(
+          showSortHeader: true,
+          onCategoryMoveToSlot: (id, targetId, slot) => panelRef
+              .read(librarySidebarMoveServiceProvider)
+              .moveVibeCategory(id, targetId, slot),
           categories: categories.categories,
           totalEntryCount: library.entries.length,
           favoriteCount: library.favoriteCount,

@@ -5,6 +5,7 @@ import 'package:synchronized/synchronized.dart';
 import '../../core/utils/app_logger.dart';
 import '../../data/models/gallery/gallery_category.dart';
 import '../../data/models/gallery/gallery_tree_drop_slot.dart';
+import '../../data/models/gallery/library_tree_order.dart';
 import '../../data/repositories/gallery_category_repository.dart';
 import 'category_operation_error.dart';
 
@@ -297,18 +298,25 @@ class GalleryCategoryNotifier extends _$GalleryCategoryNotifier {
   Future<bool> moveCategoryToSlot(
     String categoryId,
     String targetId,
-    GalleryTreeDropSlot slot,
-  ) {
+    GalleryTreeDropSlot slot, {
+    Map<String, int>? displayOrder,
+  }) {
     return _moveLock.synchronized(
-      () => _moveCategoryToSlot(categoryId, targetId, slot),
+      () => _moveCategoryToSlot(
+        categoryId,
+        targetId,
+        slot,
+        displayOrder: displayOrder,
+      ),
     );
   }
 
   Future<bool> _moveCategoryToSlot(
     String categoryId,
     String targetId,
-    GalleryTreeDropSlot slot,
-  ) async {
+    GalleryTreeDropSlot slot, {
+    Map<String, int>? displayOrder,
+  }) async {
     final category = state.categories.findById(categoryId);
     final target = state.categories.findById(targetId);
     if (category == null || target == null || categoryId == targetId) {
@@ -322,7 +330,12 @@ class GalleryCategoryNotifier extends _$GalleryCategoryNotifier {
     }
 
     GalleryCategory? physicallyMoved;
-    var working = [...state.categories];
+    var working = applyLibraryDisplayOrder(
+      state.categories,
+      displayOrder,
+      idOf: (c) => c.id,
+      withOrder: (c, order) => c.copyWith(sortOrder: order),
+    );
     try {
       if (category.parentId != newParentId) {
         physicallyMoved = await _repository.moveCategory(
@@ -345,7 +358,10 @@ class GalleryCategoryNotifier extends _$GalleryCategoryNotifier {
           working
               .where((c) => c.parentId == newParentId && c.id != categoryId)
               .toList()
-            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+            ..sort((a, b) {
+              final order = a.sortOrder.compareTo(b.sortOrder);
+              return order == 0 ? a.id.compareTo(b.id) : order;
+            });
       final orderedIds = [for (final sibling in siblings) sibling.id];
       switch (slot) {
         case GalleryTreeDropSlot.child:
@@ -364,8 +380,11 @@ class GalleryCategoryNotifier extends _$GalleryCategoryNotifier {
 
       if (category.parentId == newParentId) {
         final currentIds =
-            (state.categories.where((c) => c.parentId == newParentId).toList()
-                  ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
+            (working.where((c) => c.parentId == newParentId).toList()
+                  ..sort((a, b) {
+                    final order = a.sortOrder.compareTo(b.sortOrder);
+                    return order == 0 ? a.id.compareTo(b.id) : order;
+                  }))
                 .map((c) => c.id)
                 .toList();
         if (_sameOrder(currentIds, orderedIds)) return false;

@@ -70,6 +70,11 @@ class StorageKeys {
   static const String vibeLibrarySidebarWidth = 'vibe_library_sidebar_width';
   static const String preciseRefSidebarWidth = 'precise_ref_sidebar_width';
   static const String tagLibrarySidebarWidth = 'tag_library_sidebar_width';
+  // Sidebar display order stays on this device, outside the sync allowlist.
+  static const String localGalleryFolderSort = 'local_gallery_folder_sort';
+  static const String localGalleryAlbumSort = 'local_gallery_album_sort';
+  static const String vibeLibraryCategorySort = 'vibe_library_category_sort';
+  static const String tagLibraryCategorySort = 'tag_library_category_sort';
   static const String leftPanelWidth = 'left_panel_width';
   static const String promptAreaHeight = 'prompt_area_height';
 

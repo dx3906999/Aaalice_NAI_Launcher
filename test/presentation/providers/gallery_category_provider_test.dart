@@ -112,6 +112,29 @@ void main() {
     },
   );
 
+  test(
+    'manual move persists the displayed order without moving physical folders',
+    () async {
+      final changed = await container
+          .read(galleryCategoryNotifierProvider.notifier)
+          .moveCategoryToSlot(
+            'a',
+            'c',
+            GalleryTreeDropSlot.after,
+            displayOrder: {'c': 0, 'b': 1, 'a': 2},
+          );
+      expect(changed, isTrue);
+      expect(orderedCategoryIds(), ['c', 'a', 'b']);
+      final persisted = await GalleryCategoryRepository.instance
+          .loadCategories();
+      persisted.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      expect(persisted.map((c) => c.id), ['c', 'a', 'b']);
+      for (final id in ['a', 'b', 'c']) {
+        expect(await Directory('${galleryRoot.path}/$id').exists(), isTrue);
+      }
+    },
+  );
+
   test('failed metadata save preserves the previous config file', () async {
     final configFile = File(
       '${galleryRoot.path}${Platform.pathSeparator}.gallery_categories.json',

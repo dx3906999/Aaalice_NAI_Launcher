@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/localization_extension.dart';
 import '../../providers/gallery_album_provider.dart';
@@ -12,9 +12,12 @@ import '../../widgets/gallery/gallery_album_tree_view.dart';
 import '../../widgets/gallery/gallery_category_tree_view.dart';
 import '../../widgets/gallery/gallery_scan_progress_panel.dart';
 import '../../widgets/gallery/gallery_sidebar.dart';
+import '../../widgets/gallery/gallery_sidebar_sort_control.dart';
+import '../../providers/library_sidebar_sort_provider.dart';
+import '../../widgets/gallery/library_sidebar_root_drop_target.dart';
 
 /// 本地图库左栏：全部图像 + 相簿（逻辑引用）+ 文件夹（物理分类）。
-class LocalGalleryCategoryPanel extends StatefulWidget {
+class LocalGalleryCategoryPanel extends ConsumerStatefulWidget {
   const LocalGalleryCategoryPanel({
     super.key,
     required this.galleryState,
@@ -85,11 +88,12 @@ class LocalGalleryCategoryPanel extends StatefulWidget {
   final VoidCallback? afterSelection;
 
   @override
-  State<LocalGalleryCategoryPanel> createState() =>
+  ConsumerState<LocalGalleryCategoryPanel> createState() =>
       _LocalGalleryCategoryPanelState();
 }
 
-class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
+class _LocalGalleryCategoryPanelState
+    extends ConsumerState<LocalGalleryCategoryPanel> {
   bool _albumsExpanded = true;
   bool _foldersExpanded = true;
 
@@ -99,6 +103,12 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final albumSort = ref
+        .watch(librarySidebarSortProvider(LibrarySidebarSection.albums))
+        .sort;
+    final folderSort = ref
+        .watch(librarySidebarSortProvider(LibrarySidebarSection.folders))
+        .sort;
     return GallerySidebarSurface(
       modal: widget.modal,
       footer: const GalleryScanProgressPanel(),
@@ -117,24 +127,30 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
                   isSelected: _allImagesSelected,
                   onTap: _selectAllImages,
                 ),
-                _wrapRootDropTarget<GalleryAlbum>(
-                  GallerySidebarSectionHeader(
+                LibrarySidebarRootDropTarget<GalleryAlbum>(
+                  canDrop: (album) => album.parentId != null,
+                  onDrop: (album) async {
+                    await widget.onAlbumMove(album.id, null);
+                  },
+                  child: GallerySidebarSectionHeader(
                     toggleKey: const ValueKey('local-gallery-albums-toggle'),
                     icon: Icons.photo_album_outlined,
                     title: context.l10n.localGallery_albumSectionTitle,
+                    trailing: const GallerySidebarSortControl(
+                      section: LibrarySidebarSection.albums,
+                    ),
                     isExpanded: _albumsExpanded,
                     onToggle: () =>
                         setState(() => _albumsExpanded = !_albumsExpanded),
                     onCreate: () => widget.onCreateAlbum(null),
                   ),
-                  (album) => album.id,
-                  (albumId) => widget.onAlbumMove(albumId, null),
                 ),
                 if (_albumsExpanded)
                   FutureBuilder<int>(
                     future: widget.favoriteCount,
                     builder: (context, snapshot) => GalleryAlbumTreeView(
                       albums: widget.albumState.albums,
+                      sort: albumSort,
                       totalImageCount: widget.galleryState.totalCount,
                       favoriteCount: snapshot.data ?? 0,
                       selectedAlbumId: widget.albumState.selectedAlbumId,
@@ -154,22 +170,27 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
                       onCreateAlbumRequest: () => widget.onCreateAlbum(null),
                     ),
                   ),
-                _wrapRootDropTarget<GalleryCategory>(
-                  GallerySidebarSectionHeader(
+                LibrarySidebarRootDropTarget<GalleryCategory>(
+                  canDrop: (category) => category.parentId != null,
+                  onDrop: (category) =>
+                      widget.onCategoryMove(category.id, null),
+                  child: GallerySidebarSectionHeader(
                     toggleKey: const ValueKey('local-gallery-folders-toggle'),
                     icon: Icons.folder_outlined,
                     title: context.l10n.localGallery_folderSectionTitle,
+                    trailing: const GallerySidebarSortControl(
+                      section: LibrarySidebarSection.folders,
+                    ),
                     isExpanded: _foldersExpanded,
                     onToggle: () =>
                         setState(() => _foldersExpanded = !_foldersExpanded),
                     onCreate: widget.onCreateCategory,
                   ),
-                  (category) => category.id,
-                  (categoryId) => widget.onCategoryMove(categoryId, null),
                 ),
                 if (_foldersExpanded)
                   GalleryCategoryTreeView(
                     categories: widget.categoryState.categories,
+                    sort: folderSort,
                     totalImageCount: widget.galleryState.totalCount,
                     selectedCategoryId: widget.categoryState.selectedCategoryId,
                     includeRootNodes: false,
@@ -199,37 +220,4 @@ class _LocalGalleryCategoryPanelState extends State<LocalGalleryCategoryPanel> {
     widget.onCategorySelected(null);
     widget.afterSelection?.call();
   }
-}
-
-/// 拖到分区标题 = 移到根级（相簿/分类各自的类型与回调）
-Widget _wrapRootDropTarget<T extends Object>(
-  Widget child,
-  String Function(T item) idOf,
-  Future<void> Function(String itemId) onMoveToRoot,
-) {
-  return Builder(
-    builder: (context) {
-      return DragTarget<T>(
-        onWillAcceptWithDetails: (_) => true,
-        onAcceptWithDetails: (details) {
-          HapticFeedback.heavyImpact();
-          onMoveToRoot(idOf(details.data));
-        },
-        builder: (context, candidate, rejected) {
-          final dragging = candidate.isNotEmpty;
-          final theme = Theme.of(context);
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            decoration: dragging
-                ? BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  )
-                : null,
-            child: child,
-          );
-        },
-      );
-    },
-  );
 }

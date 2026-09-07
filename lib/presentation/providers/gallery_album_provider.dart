@@ -167,13 +167,15 @@ class GalleryAlbumNotifier extends _$GalleryAlbumNotifier {
   Future<bool> moveAlbumToSlot(
     String albumId,
     String targetId,
-    GalleryTreeDropSlot slot,
-  ) {
+    GalleryTreeDropSlot slot, {
+    Map<String, int>? displayOrder,
+  }) {
     return _moveLock.synchronized(() async {
       final changed = await _albums.moveAlbumToSlot(
         albumId: albumId,
         targetId: targetId,
         slot: slot,
+        displayOrder: displayOrder,
       );
       if (changed) {
         await _load();

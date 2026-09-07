@@ -33,6 +33,13 @@ import '../../widgets/common/owned_scroll_controller.dart';
 import '../../widgets/common/themed_confirm_dialog.dart';
 import '../../widgets/gallery/gallery_album_tree_view.dart';
 import '../../widgets/gallery/gallery_sidebar.dart';
+import '../../widgets/gallery/gallery_sidebar_sort_control.dart';
+import '../../providers/library_sidebar_sort_provider.dart';
+import '../../utils/library_sidebar_sort.dart';
+import '../../services/library_sidebar_move_service.dart';
+import '../../widgets/gallery/library_sidebar_root_drop_target.dart';
+import '../../../data/models/tag_library/tag_library_category.dart';
+import '../../../data/models/gallery/gallery_tree_drop_slot.dart';
 import '../../widgets/shortcuts/shortcut_aware_widget.dart';
 import 'widgets/category_tree_view.dart';
 import 'widgets/entry_card.dart';
@@ -69,13 +76,14 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
   );
   final ValueNotifier<Set<String>> _expandedCategoryIds =
       ValueNotifier<Set<String>>(<String>{});
-  bool _categoriesExpanded = true;
+  final ValueNotifier<bool> _categoriesExpanded = ValueNotifier(true);
   bool _showCategoryPanel = true;
 
   @override
   void dispose() {
     _searchFocusNode.dispose();
     _expandedCategoryIds.dispose();
+    _categoriesExpanded.dispose();
     _cardScrollController.dispose();
     _listScrollController.dispose();
     _groupedScrollController.dispose();
@@ -198,7 +206,7 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
                       onExport: _handleExport,
                       onAddEntry: _showAddEntryDialog,
                     ),
-                    sidebar: showSidebar ? _buildCategorySidebar(state) : null,
+                    sidebar: showSidebar ? _buildCategorySidebar() : null,
                     body: _buildContent(theme, state, isSelectionMode),
                   );
                 },
@@ -267,9 +275,31 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
   }
 
   /// 构建分类侧边栏
-  Widget _buildCategorySidebar(
-    TagLibraryPageState state, {
+  Widget _buildCategorySidebar({
     bool forPanel = false,
+    VoidCallback? onCategorySelectionComplete,
+  }) => ValueListenableBuilder<bool>(
+    valueListenable: _categoriesExpanded,
+    builder: (context, expanded, _) => Consumer(
+      builder: (context, sidebarRef, _) => _buildCategorySidebarContents(
+        sidebarRef.watch(tagLibraryPageNotifierProvider),
+        sidebarRef
+            .watch(
+              librarySidebarSortProvider(LibrarySidebarSection.tagCategories),
+            )
+            .sort,
+        expanded: expanded,
+        forPanel: forPanel,
+        onCategorySelectionComplete: onCategorySelectionComplete,
+      ),
+    ),
+  );
+
+  Widget _buildCategorySidebarContents(
+    TagLibraryPageState state,
+    LibrarySidebarSort sort, {
+    required bool expanded,
+    required bool forPanel,
     VoidCallback? onCategorySelectionComplete,
   }) {
     void selectCategory(String? id) {
@@ -309,85 +339,98 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
     return GallerySidebarSurface(
       key: forPanel ? null : const Key('tag-library-category-sidebar'),
       modal: forPanel,
-      child: Column(
+      child: ListView(
+        padding: EdgeInsets.zero,
         children: [
           if (!forPanel)
             const SizedBox(
               height: GalleryCollectionChrome.navigationTopPadding,
             ),
           allEntries,
-          GallerySidebarSectionHeader(
-            toggleKey: const Key('tag-library-category-section-toggle'),
-            icon: Icons.folder_outlined,
-            title: context.l10n.tagLibrary_categories,
-            isExpanded: _categoriesExpanded,
-            onToggle: () =>
-                setState(() => _categoriesExpanded = !_categoriesExpanded),
-            onCreate: _showAddCategoryDialog,
-          ),
-          if (_categoriesExpanded)
-            Expanded(
-              child: ValueListenableBuilder<Set<String>>(
-                valueListenable: _expandedCategoryIds,
-                builder: (context, expandedCategoryIds, _) => CategoryTreeView(
-                  categories: state.categories,
-                  entries: state.entries,
-                  selectedCategoryId: state.selectedCategoryId,
-                  expandedCategoryIds: expandedCategoryIds,
-                  includeAllEntries: false,
-                  onExpandedCategoryIdsChanged: (ids) {
-                    _expandedCategoryIds.value = ids;
-                  },
-                  onCategorySelected: selectCategory,
-                  onCategoryRename: (id, name) {
-                    ref
-                        .read(tagLibraryPageNotifierProvider.notifier)
-                        .renameCategory(id, name);
-                  },
-                  onCategoryDelete: _showDeleteCategoryConfirmation,
-                  onAddSubCategory: (parentId) {
-                    _showAddCategoryDialog(parentId: parentId);
-                  },
-                  onAddEntry: _showAddEntryDialogForCategory,
-                  onCategoryMove: (categoryId, newParentId) {
-                    ref
-                        .read(tagLibraryPageNotifierProvider.notifier)
-                        .moveCategory(categoryId, newParentId);
-                  },
-                  onCategoryReorder: (parentId, oldIndex, newIndex) {
-                    ref
-                        .read(tagLibraryPageNotifierProvider.notifier)
-                        .reorderCategories(parentId, oldIndex, newIndex);
-                  },
-                  onEntryDrop: (entryId, categoryId) async {
-                    await ref
-                        .read(tagLibraryPageNotifierProvider.notifier)
-                        .moveEntryToCategory(entryId, categoryId);
-                    if (!context.mounted) return;
-                    AppToast.success(
-                      context,
-                      context.l10n.tagLibrary_entryMoved,
-                    );
-                  },
-                  onEntryFavoriteDrop: (entryId) async {
-                    final index = state.entries.indexWhere(
-                      (candidate) => candidate.id == entryId,
-                    );
-                    if (index >= 0 && !state.entries[index].isFavorite) {
-                      await ref
-                          .read(tagLibraryPageNotifierProvider.notifier)
-                          .toggleFavorite(entryId);
-                    }
-                  },
-                ),
+          LibrarySidebarRootDropTarget<TagLibraryCategory>(
+            canDrop: (category) => category.parentId != null,
+            onDrop: (category) async {
+              await ref
+                  .read(librarySidebarMoveServiceProvider)
+                  .moveTagCategory(
+                    category.id,
+                    null,
+                    GalleryTreeDropSlot.child,
+                  );
+            },
+            child: GallerySidebarSectionHeader(
+              toggleKey: const Key('tag-library-category-section-toggle'),
+              icon: Icons.folder_outlined,
+              title: context.l10n.tagLibrary_categories,
+              trailing: const GallerySidebarSortControl(
+                section: LibrarySidebarSection.tagCategories,
               ),
-            )
-          else
-            const Spacer(),
+              isExpanded: expanded,
+              onToggle: () => _categoriesExpanded.value = !expanded,
+              onCreate: _showAddCategoryDialog,
+            ),
+          ),
+          if (expanded) _buildCategoryTree(state, sort, selectCategory),
         ],
       ),
     );
   }
+
+  Widget _buildCategoryTree(
+    TagLibraryPageState state,
+    LibrarySidebarSort sort,
+    ValueChanged<String?> selectCategory,
+  ) => ValueListenableBuilder<Set<String>>(
+    valueListenable: _expandedCategoryIds,
+    builder: (context, expandedCategoryIds, _) => CategoryTreeView(
+      categories: state.categories,
+      sort: sort,
+      entries: state.entries,
+      selectedCategoryId: state.selectedCategoryId,
+      expandedCategoryIds: expandedCategoryIds,
+      includeAllEntries: false,
+      embedded: true,
+      onExpandedCategoryIdsChanged: (ids) {
+        _expandedCategoryIds.value = ids;
+      },
+      onCategorySelected: selectCategory,
+      onCategoryRename: (id, name) {
+        ref
+            .read(tagLibraryPageNotifierProvider.notifier)
+            .renameCategory(id, name);
+      },
+      onCategoryDelete: _showDeleteCategoryConfirmation,
+      onAddSubCategory: (parentId) {
+        _showAddCategoryDialog(parentId: parentId);
+      },
+      onAddEntry: _showAddEntryDialogForCategory,
+      onCategoryMove: (categoryId, newParentId) {
+        ref
+            .read(tagLibraryPageNotifierProvider.notifier)
+            .moveCategory(categoryId, newParentId);
+      },
+      onCategoryMoveToSlot: (id, targetId, slot) => ref
+          .read(librarySidebarMoveServiceProvider)
+          .moveTagCategory(id, targetId, slot),
+      onEntryDrop: (entryId, categoryId) async {
+        await ref
+            .read(tagLibraryPageNotifierProvider.notifier)
+            .moveEntryToCategory(entryId, categoryId);
+        if (!context.mounted) return;
+        AppToast.success(context, context.l10n.tagLibrary_entryMoved);
+      },
+      onEntryFavoriteDrop: (entryId) async {
+        final index = state.entries.indexWhere(
+          (candidate) => candidate.id == entryId,
+        );
+        if (index >= 0 && !state.entries[index].isFavorite) {
+          await ref
+              .read(tagLibraryPageNotifierProvider.notifier)
+              .toggleFavorite(entryId);
+        }
+      },
+    ),
+  );
 
   Future<void> _showCategoryPanelSheet(TagLibraryPageState state) {
     return AdaptivePresenter.showPanel<void>(
@@ -395,7 +438,6 @@ class _TagLibraryPageScreenState extends ConsumerState<TagLibraryPageScreen> {
       title: context.l10n.tagLibrary_categories,
       initialChildSize: 0.76,
       builder: (panelContext, scrollController) => _buildCategorySidebar(
-        state,
         forPanel: true,
         onCategorySelectionComplete: () => Navigator.of(panelContext).pop(),
       ),

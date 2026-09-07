@@ -415,6 +415,7 @@ class GallerySidebarSectionHeader extends StatefulWidget {
     required this.isExpanded,
     required this.onToggle,
     this.onCreate,
+    this.trailing,
   });
 
   final Key toggleKey;
@@ -423,6 +424,7 @@ class GallerySidebarSectionHeader extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onToggle;
   final VoidCallback? onCreate;
+  final Widget? trailing;
 
   @override
   State<GallerySidebarSectionHeader> createState() =>
@@ -436,10 +438,6 @@ class _GallerySidebarSectionHeaderState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final minimumControlExtent = context.interactionPolicy.minimumControlExtent;
-    final toggleLabel = widget.isExpanded
-        ? context.l10n.common_collapse
-        : context.l10n.common_expand;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
@@ -458,71 +456,134 @@ class _GallerySidebarSectionHeaderState
         ),
         child: Padding(
           padding: const EdgeInsets.only(right: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  expanded: widget.isExpanded,
-                  label: '${widget.title}，$toggleLabel',
-                  child: Tooltip(
-                    message: toggleLabel,
-                    child: InkWell(
-                      onTap: widget.onToggle,
-                      borderRadius: BorderRadius.circular(8),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 4),
-                            Icon(
-                              widget.isExpanded
-                                  ? Icons.expand_more
-                                  : Icons.chevron_right,
-                              size: 18,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              widget.icon,
-                              size: 20,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                widget.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final toggle = _buildToggle(context);
+              final actions = _buildActions(context);
+              if (widget.trailing != null &&
+                  !_fitsSingleRow(context, constraints.maxWidth)) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: toggle),
+                        ...actions.skip(1),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 4),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: widget.trailing!,
                       ),
                     ),
-                  ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: toggle),
+                  ...actions,
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _fitsSingleRow(BuildContext context, double width) {
+    final title = TextPainter(
+      text: TextSpan(
+        text: widget.title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    // Reserve the toggle's icons/gaps and both action hit areas before placing
+    // the title; increased text size can then wrap the actions without squeezing it.
+    final requiredWidth =
+        title.width + 54 + 8 + 44 + (widget.onCreate == null ? 0 : 44);
+    title.dispose();
+    return width >= requiredWidth;
+  }
+
+  List<Widget> _buildActions(BuildContext context) {
+    final theme = Theme.of(context);
+    final minimumControlExtent = context.interactionPolicy.minimumControlExtent;
+    return [
+      if (widget.trailing != null) widget.trailing!,
+      if (widget.onCreate != null)
+        if (widget.trailing != null)
+          IconButton(
+            tooltip: context.l10n.common_new,
+            onPressed: widget.onCreate,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+            icon: const Icon(Icons.add, size: 18),
+          )
+        else ...[
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: widget.onCreate,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(context.l10n.common_new),
+            style: FilledButton.styleFrom(
+              minimumSize: Size(0, minimumControlExtent),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: theme.textTheme.labelMedium,
+            ),
+          ),
+        ],
+    ];
+  }
+
+  Widget _buildToggle(BuildContext context) {
+    final theme = Theme.of(context);
+    final toggleLabel = widget.isExpanded
+        ? context.l10n.common_collapse
+        : context.l10n.common_expand;
+    return Semantics(
+      button: true,
+      expanded: widget.isExpanded,
+      label: '${widget.title}，$toggleLabel',
+      child: Tooltip(
+        message: toggleLabel,
+        child: InkWell(
+          onTap: widget.onToggle,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              children: [
+                const SizedBox(width: 4),
+                Icon(
+                  widget.isExpanded ? Icons.expand_more : Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ),
-              if (widget.onCreate != null) ...[
+                const SizedBox(width: 4),
+                Icon(widget.icon, size: 20, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
-                FilledButton.tonalIcon(
-                  onPressed: widget.onCreate,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(context.l10n.common_new),
-                  style: FilledButton.styleFrom(
-                    minimumSize: Size(0, minimumControlExtent),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    maxLines: widget.trailing == null ? 1 : null,
+                    overflow: widget.trailing == null
+                        ? TextOverflow.ellipsis
+                        : null,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    textStyle: theme.textTheme.labelMedium,
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),

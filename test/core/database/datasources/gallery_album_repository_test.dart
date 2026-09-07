@@ -496,6 +496,42 @@ void main() {
     );
   });
 
+  test(
+    'manual album move preserves display ordering in other branches',
+    () async {
+      final a = await dataSource.albums.createAlbum(name: 'A');
+      final b = await dataSource.albums.createAlbum(name: 'B');
+      final c = await dataSource.albums.createAlbum(name: 'C');
+      final child1 = await dataSource.albums.createAlbum(
+        name: 'child1',
+        parentId: a,
+      );
+      final child2 = await dataSource.albums.createAlbum(
+        name: 'child2',
+        parentId: a,
+      );
+      expect(
+        await dataSource.albums.moveAlbumToSlot(
+          albumId: a,
+          targetId: c,
+          slot: GalleryTreeDropSlot.after,
+          displayOrder: {c: 0, b: 1, a: 2, child2: 3, child1: 4},
+        ),
+        isTrue,
+      );
+      final albums = await dataSource.albums.getAlbums();
+      expect(albums.where((a) => a.parentId == null).map((a) => a.id), [
+        c,
+        a,
+        b,
+      ]);
+      expect(
+        albums.where((album) => album.parentId == a).map((album) => album.id),
+        [child2, child1],
+      );
+    },
+  );
+
   test('moveAlbumToSlot adjacent same-position drop is a no-op', () async {
     final a = await dataSource.albums.createAlbum(name: 'A');
     final b = await dataSource.albums.createAlbum(name: 'B');

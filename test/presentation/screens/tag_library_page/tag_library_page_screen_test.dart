@@ -4,14 +4,51 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nai_launcher/core/shortcuts/shortcut_config.dart';
+import 'package:nai_launcher/core/storage/local_storage_service.dart';
 import 'package:nai_launcher/data/models/tag_library/tag_library_category.dart';
 import 'package:nai_launcher/data/models/tag_library/tag_library_entry.dart';
 import 'package:nai_launcher/l10n/app_localizations.dart';
 import 'package:nai_launcher/presentation/providers/shortcuts_provider.dart';
 import 'package:nai_launcher/presentation/providers/tag_library_page_provider.dart';
 import 'package:nai_launcher/presentation/screens/tag_library_page/tag_library_page_screen.dart';
+import '../../../helpers/light_theme_contrast.dart';
 
 void main() {
+  testWidgets('open category panel immediately applies sorting and collapse', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(390, 844));
+    await _pumpTagLibrary(tester, _SortingTagLibraryPageNotifier.new);
+    await tester.tap(find.byKey(const Key('tag-library-categories-button')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('分类 10')).dy,
+      lessThan(tester.getTopLeft(find.text('分类 2')).dy),
+    );
+    final categoryElement = tester.element(find.text('分类 10'));
+    await tester.tap(find.byKey(const ValueKey('sidebar-sort-tagCategories')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('sidebar-sort-option-nameAscending')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('分类 2')).dy,
+      lessThan(tester.getTopLeft(find.text('分类 10')).dy),
+    );
+    expect(tester.element(find.text('分类 10')), same(categoryElement));
+    final headerTitle = find.descendant(
+      of: find.byKey(const Key('tag-library-category-section-toggle')),
+      matching: find.text('分类'),
+    );
+    await tester.tap(headerTitle);
+    await tester.pumpAndSettle();
+    expect(find.text('分类 2'), findsNothing);
+    await tester.tap(headerTitle);
+    await tester.pumpAndSettle();
+    expect(find.text('分类 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'mobile category selection closes its panel without popping route',
     (tester) async {
@@ -217,7 +254,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('tag-library-categories-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('新建'));
+    final createCategory = find.byTooltip('新建');
+    await tester.ensureVisible(createCategory);
+    await tester.tap(createCategory);
     await tester.pumpAndSettle();
 
     final panels = find.byKey(const ValueKey('adaptive-bottom-sheet'));
@@ -312,6 +351,9 @@ Future<void> _pumpTagLibrary(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        localStorageServiceProvider.overrideWith(
+          (ref) => InMemoryLocalStorageService(),
+        ),
         tagLibraryPageNotifierProvider.overrideWith(createNotifier),
         shortcutConfigNotifierProvider.overrideWith(
           _TestShortcutConfigNotifier.new,
@@ -385,6 +427,26 @@ class _TestTagLibraryPageNotifier extends TagLibraryPageNotifier {
         id: 'test-child-category',
         name: '测试子类别',
         parentId: 'test-category',
+        createdAt: DateTime(2026),
+      ),
+    ],
+  );
+}
+
+class _SortingTagLibraryPageNotifier extends TagLibraryPageNotifier {
+  @override
+  TagLibraryPageState build() => TagLibraryPageState(
+    categories: [
+      TagLibraryCategory(
+        id: 'a',
+        name: '分类 10',
+        sortOrder: 0,
+        createdAt: DateTime(2026),
+      ),
+      TagLibraryCategory(
+        id: 'b',
+        name: '分类 2',
+        sortOrder: 1,
         createdAt: DateTime(2026),
       ),
     ],

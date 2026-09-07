@@ -106,6 +106,7 @@ abstract interface class GalleryAlbumRepository {
     required String albumId,
     required String targetId,
     required GalleryTreeDropSlot slot,
+    Map<String, int>? displayOrder,
   });
 }
 
@@ -775,9 +776,15 @@ class SqliteGalleryAlbumRepository implements GalleryAlbumRepository {
     required String albumId,
     required String targetId,
     required GalleryTreeDropSlot slot,
+    Map<String, int>? displayOrder,
   }) {
     return _moveLock.synchronized(
-      () => _moveAlbumToSlot(albumId: albumId, targetId: targetId, slot: slot),
+      () => _moveAlbumToSlot(
+        albumId: albumId,
+        targetId: targetId,
+        slot: slot,
+        displayOrder: displayOrder,
+      ),
     );
   }
 
@@ -785,6 +792,7 @@ class SqliteGalleryAlbumRepository implements GalleryAlbumRepository {
     required String albumId,
     required String targetId,
     required GalleryTreeDropSlot slot,
+    Map<String, int>? displayOrder,
   }) async {
     if (albumId == targetId) return false;
 
@@ -803,6 +811,16 @@ class SqliteGalleryAlbumRepository implements GalleryAlbumRepository {
     }
     if (!byId.containsKey(albumId) || !byId.containsKey(targetId)) {
       return false;
+    }
+
+    if (displayOrder != null) {
+      if (displayOrder.length != byId.length ||
+          byId.keys.any((id) => !displayOrder.containsKey(id))) {
+        throw StateError('Album list changed during drag; retry the move');
+      }
+      for (final id in byId.keys.toList()) {
+        byId[id] = (byId[id]!.$1, displayOrder[id]!);
+      }
     }
 
     final String? newParent;
@@ -834,14 +852,20 @@ class SqliteGalleryAlbumRepository implements GalleryAlbumRepository {
               .where((e) => e.key != albumId && e.value.$1 == targetId)
               .map((e) => (e.key, e.value.$2))
               .toList()
-            ..sort((a, b) => a.$2.compareTo(b.$2));
+            ..sort((a, b) {
+              final order = a.$2.compareTo(b.$2);
+              return order == 0 ? a.$1.compareTo(b.$1) : order;
+            });
     } else {
       siblings =
           byId.entries
               .where((e) => e.key != albumId && e.value.$1 == newParent)
               .map((e) => (e.key, e.value.$2))
               .toList()
-            ..sort((a, b) => a.$2.compareTo(b.$2));
+            ..sort((a, b) {
+              final order = a.$2.compareTo(b.$2);
+              return order == 0 ? a.$1.compareTo(b.$1) : order;
+            });
     }
 
     final ordered = <String>[for (final e in siblings) e.$1];
@@ -866,13 +890,26 @@ class SqliteGalleryAlbumRepository implements GalleryAlbumRepository {
               .where((e) => e.value.$1 == newParent)
               .map((e) => (e.key, e.value.$2))
               .toList()
-            ..sort((a, b) => a.$2.compareTo(b.$2));
+            ..sort((a, b) {
+              final order = a.$2.compareTo(b.$2);
+              return order == 0 ? a.$1.compareTo(b.$1) : order;
+            });
       final currentIds = [for (final e in current) e.$1];
       if (const ListEquality().equals(currentIds, ordered)) return false;
     }
 
     await gateway.execute('moveAlbumToSlot.apply', (db) async {
       final batch = db.batch();
+      if (displayOrder != null) {
+        for (final entry in displayOrder.entries) {
+          batch.update(
+            GalleryTables.albums,
+            {'sort_order': entry.value},
+            where: 'id = ?',
+            whereArgs: [entry.key],
+          );
+        }
+      }
       batch.update(
         GalleryTables.albums,
         {'parent_id': newParent, 'updated_at': _now()},

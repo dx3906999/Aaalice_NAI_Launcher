@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../core/platform/platform_capabilities.dart';
@@ -13,6 +10,8 @@ import '../common/context_menu_anchor.dart';
 import '../common/themed_input.dart';
 import '../../utils/gallery_drop_reader.dart';
 import 'gallery_sidebar.dart';
+import 'library_sidebar_drag_item.dart';
+import '../../utils/library_sidebar_sort.dart';
 
 enum _AlbumAction { rename, addSubAlbum, moveUp, moveToRoot, delete }
 
@@ -26,6 +25,7 @@ class GalleryAlbumTreeView extends StatefulWidget {
   final String? selectedAlbumId;
   final bool includeAllImages;
   final bool embedded;
+  final LibrarySidebarSort sort;
   final ValueChanged<String?> onAlbumSelected;
   final Future<void> Function(String albumId, String newName)? onAlbumRename;
   final Future<void> Function(String albumId)? onAlbumDeleteRequest;
@@ -46,6 +46,7 @@ class GalleryAlbumTreeView extends StatefulWidget {
     super.key,
     required this.albums,
     required this.totalImageCount,
+    this.sort = LibrarySidebarSort.original,
     this.favoriteCount = 0,
     this.selectedAlbumId,
     this.includeAllImages = true,
@@ -68,25 +69,7 @@ class GalleryAlbumTreeView extends StatefulWidget {
 class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
   final Set<String> _expandedIds = {};
   final Set<String> _superDraggingAlbumIds = {};
-  String? _hoveredAlbumId;
-  final Map<String, GalleryTreeDropSlot> _slotStates = {};
-  Timer? _autoExpandTimer;
   bool _favoriteDropActive = false;
-
-  @override
-  void dispose() {
-    _autoExpandTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startAutoExpandTimer(String albumId) {
-    _autoExpandTimer?.cancel();
-    _autoExpandTimer = Timer(const Duration(milliseconds: 800), () {
-      if (_hoveredAlbumId == albumId && mounted) {
-        setState(() => _expandedIds.add(albumId));
-      }
-    });
-  }
 
   @override
   void didUpdateWidget(covariant GalleryAlbumTreeView oldWidget) {
@@ -179,14 +162,32 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
     );
   }
 
+  List<GalleryAlbum> _sorted(Iterable<GalleryAlbum> albums) =>
+      sortLibrarySidebarItems(
+        albums,
+        sort: widget.sort,
+        idOf: (a) => a.id,
+        nameOf: (a) => a.name,
+        countOf: (a) => a.imageCount,
+        orderOf: (a) => a.sortOrder,
+      );
+
   List<Widget> _buildRootNodes() {
     return [
-      for (final album in widget.albums.rootAlbums) _buildAlbumNode(album, 0),
+      for (final album in _sorted(widget.albums.rootAlbums))
+        _buildAlbumNode(album, 0),
     ];
   }
 
-  Widget _buildAlbumNode(GalleryAlbum album, int depth) {
-    final children = widget.albums.getChildren(album.id);
+  Widget _buildAlbumNode(GalleryAlbum album, int depth) => KeyedSubtree(
+    key: ValueKey(album.id),
+    child: _buildAlbumContent(album, depth),
+  );
+
+  Widget _buildAlbumContent(GalleryAlbum album, int depth) {
+    final children = _sorted(
+      widget.albums.where((a) => a.parentId == album.id),
+    );
     final isExpanded = _expandedIds.contains(album.id);
 
     final item = _AlbumItem(
@@ -226,11 +227,25 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
           : () => widget.onAlbumDeleteRequest!(album.id),
     );
 
-    // 节点自身：可拖动 + 三槽放置目标（before/after=排序或跨层上移，child=移入）
     Widget node = item;
     if (widget.onAlbumMoveToSlot != null) {
-      node = _buildDraggableAlbum(album, node);
-      node = _buildAlbumSlotTarget(album, node);
+      node = LibrarySidebarDragItem<GalleryAlbum>(
+        key: ValueKey(('album-drag', album.id)),
+        item: album,
+        label: album.name,
+        icon: Icons.photo_album_outlined,
+        canDrop: (source, slot) =>
+            source.id != album.id &&
+            !widget.albums.wouldCreateCycle(
+              source.id,
+              slot == GalleryTreeDropSlot.child ? album.id : album.parentId,
+            ) &&
+            !(slot == GalleryTreeDropSlot.child && source.parentId == album.id),
+        onDrop: (source, slot) =>
+            widget.onAlbumMoveToSlot!(source.id, album.id, slot),
+        onExpand: () => setState(() => _expandedIds.add(album.id)),
+        child: node,
+      );
     }
 
     // 图片拖放目标包整棵子树（图片拖到子树任意处=加入该相簿）
@@ -241,166 +256,6 @@ class _GalleryAlbumTreeViewState extends State<GalleryAlbumTreeView> {
       node,
       for (final child in children) _buildAlbumNode(child, depth + 1),
     ]);
-  }
-
-  Widget _buildDraggableAlbum(GalleryAlbum album, Widget child) {
-    final theme = Theme.of(context);
-    return Draggable<GalleryAlbum>(
-      data: album,
-      feedback: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(8),
-        color: theme.colorScheme.surfaceContainerHigh,
-        child: Container(
-          width: 180,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.photo_album_outlined,
-                size: 18,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  album.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
-      onDragStarted: () => HapticFeedback.mediumImpact(),
-      onDragEnd: (_) {
-        _autoExpandTimer?.cancel();
-        setState(() => _hoveredAlbumId = null);
-      },
-      child: child,
-    );
-  }
-
-  Widget _buildAlbumSlotTarget(GalleryAlbum target, Widget child) {
-    final theme = Theme.of(context);
-    final childKey = GlobalKey();
-
-    return DragTarget<GalleryAlbum>(
-      onWillAcceptWithDetails: (details) {
-        final dragged = details.data;
-        if (dragged.id == target.id) return false;
-        final slot = _slotStates[target.id];
-        final chainHead = slot == GalleryTreeDropSlot.child
-            ? target.id
-            : target.parentId;
-        var ancestor = chainHead;
-        while (ancestor != null) {
-          if (ancestor == dragged.id) return false;
-          ancestor = widget.albums.findById(ancestor)?.parentId;
-        }
-        return true;
-      },
-      onMove: (details) {
-        final box = childKey.currentContext?.findRenderObject() as RenderBox?;
-        final slot = box == null
-            ? GalleryTreeDropSlot.child
-            : _slotFor(
-                details.offset,
-                box.localToGlobal(Offset.zero) & box.size,
-              );
-        if (_hoveredAlbumId != target.id || _slotStates[target.id] != slot) {
-          setState(() {
-            _hoveredAlbumId = target.id;
-            _slotStates[target.id] = slot;
-          });
-        }
-        if (slot == GalleryTreeDropSlot.child &&
-            widget.albums.getChildren(target.id).isNotEmpty &&
-            !_expandedIds.contains(target.id)) {
-          _startAutoExpandTimer(target.id);
-        }
-      },
-      onLeave: (_) {
-        if (_hoveredAlbumId == target.id) {
-          _autoExpandTimer?.cancel();
-          setState(() {
-            _hoveredAlbumId = null;
-            _slotStates.remove(target.id);
-          });
-        }
-      },
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        final slot = _slotStates[target.id] ?? GalleryTreeDropSlot.child;
-        _autoExpandTimer?.cancel();
-        setState(() {
-          _hoveredAlbumId = null;
-          _slotStates.remove(target.id);
-          if (slot == GalleryTreeDropSlot.child) {
-            _expandedIds.add(target.id);
-          }
-        });
-        widget.onAlbumMoveToSlot?.call(details.data.id, target.id, slot);
-      },
-      builder: (context, candidate, rejected) {
-        final dragging = candidate.isNotEmpty;
-        final slot = _slotStates[target.id];
-        final showLineBefore = dragging && slot == GalleryTreeDropSlot.before;
-        final showLineAfter = dragging && slot == GalleryTreeDropSlot.after;
-        final showChild = dragging && slot == GalleryTreeDropSlot.child;
-        final rejectedHint = rejected.isNotEmpty;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: showChild
-                ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                : Colors.transparent,
-            border: showChild
-                ? Border.all(color: theme.colorScheme.primary, width: 2)
-                : rejectedHint
-                ? Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.5),
-                    width: 1,
-                  )
-                : null,
-            borderRadius: showChild || rejectedHint
-                ? BorderRadius.circular(8)
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (showLineBefore)
-                Container(height: 2, color: theme.colorScheme.primary),
-              KeyedSubtree(key: childKey, child: child),
-              if (showLineAfter)
-                Container(height: 2, color: theme.colorScheme.primary),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  GalleryTreeDropSlot _slotFor(Offset globalOffset, Rect rect) {
-    final local = globalOffset.dy - rect.top;
-    if (local < rect.height * 0.25) return GalleryTreeDropSlot.before;
-    if (local > rect.height * 0.75) return GalleryTreeDropSlot.after;
-    return GalleryTreeDropSlot.child;
   }
 
   Widget _wrapDropTarget(GalleryAlbum album, List<Widget> children) {

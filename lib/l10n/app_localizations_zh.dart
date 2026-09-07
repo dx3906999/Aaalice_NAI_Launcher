@@ -9,6 +9,35 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get sidebarSort_title => '排序方式';
+
+  @override
+  String sidebarSort_saveAfterMoveFailed(String error) {
+    return '顺序已调整，但未能记住排序方式：$error';
+  }
+
+  @override
+  String get sidebarSort_original => '原有顺序';
+
+  @override
+  String get sidebarSort_name => '名称';
+
+  @override
+  String get sidebarSort_count => '数量';
+
+  @override
+  String get sidebarSort_nameAscending => '名称 · 升序';
+
+  @override
+  String get sidebarSort_nameDescending => '名称 · 降序';
+
+  @override
+  String get sidebarSort_countDescending => '数量 · 从多到少';
+
+  @override
+  String get sidebarSort_countAscending => '数量 · 从少到多';
+
+  @override
   String get gallery_resizeSidebar => '拖动调整侧栏宽度；方向键微调，Home 恢复默认宽度';
 
   @override
@@ -14580,6 +14609,35 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, using the Han script (`zh_Hant`).
 class AppLocalizationsZhHant extends AppLocalizationsZh {
   AppLocalizationsZhHant() : super('zh_Hant');
+
+  @override
+  String get sidebarSort_title => '排序方式';
+
+  @override
+  String sidebarSort_saveAfterMoveFailed(String error) {
+    return '順序已調整，但無法記住排序方式：$error';
+  }
+
+  @override
+  String get sidebarSort_original => '原有順序';
+
+  @override
+  String get sidebarSort_name => '名稱';
+
+  @override
+  String get sidebarSort_count => '數量';
+
+  @override
+  String get sidebarSort_nameAscending => '名稱 · 升冪';
+
+  @override
+  String get sidebarSort_nameDescending => '名稱 · 降冪';
+
+  @override
+  String get sidebarSort_countDescending => '數量 · 由多到少';
+
+  @override
+  String get sidebarSort_countAscending => '數量 · 由少到多';
 
   @override
   String get gallery_resizeSidebar => '拖曳調整側欄寬度；方向鍵微調，Home 恢復預設寬度';

@@ -1,6 +1,8 @@
 import '../../widgets/common/image_card_batch_scope.dart';
 import '../../utils/card_drop_reader.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../services/library_sidebar_move_service.dart';
 import '../../../core/constants/storage_keys.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
@@ -17,6 +19,8 @@ import '../../widgets/gallery/gallery_state_views.dart';
 import '../../widgets/gallery/gallery_album_tree_view.dart';
 import '../../widgets/gallery/gallery_library_toolbar.dart';
 import '../../widgets/gallery/gallery_sidebar.dart';
+import '../../widgets/gallery/gallery_sidebar_sort_control.dart';
+import '../../providers/library_sidebar_sort_provider.dart';
 import 'vibe_library_commands.dart';
 import 'vibe_library_screen_controller.dart';
 import 'widgets/category/vibe_category_tree_view.dart';
@@ -174,7 +178,7 @@ VibeLibraryGridLayout computeVibeLibraryGridLayout(
   return VibeLibraryGridLayout(columns: columns, itemWidth: itemWidth);
 }
 
-class _CategoryPanel extends StatefulWidget {
+class _CategoryPanel extends ConsumerStatefulWidget {
   const _CategoryPanel({
     required this.libraryState,
     required this.categoryState,
@@ -186,10 +190,10 @@ class _CategoryPanel extends StatefulWidget {
   final Future<void> Function(VibeLibraryCommand) onCommand;
 
   @override
-  State<_CategoryPanel> createState() => _CategoryPanelState();
+  ConsumerState<_CategoryPanel> createState() => _CategoryPanelState();
 }
 
-class _CategoryPanelState extends State<_CategoryPanel> {
+class _CategoryPanelState extends ConsumerState<_CategoryPanel> {
   bool _categoriesExpanded = true;
 
   @override
@@ -211,6 +215,9 @@ class _CategoryPanelState extends State<_CategoryPanel> {
             toggleKey: const ValueKey('vibe-library-categories-toggle'),
             icon: Icons.category_outlined,
             title: context.l10n.vibeLibrary_categories,
+            trailing: const GallerySidebarSortControl(
+              section: LibrarySidebarSection.vibeCategories,
+            ),
             isExpanded: _categoriesExpanded,
             onToggle: () =>
                 setState(() => _categoriesExpanded = !_categoriesExpanded),
@@ -220,6 +227,9 @@ class _CategoryPanelState extends State<_CategoryPanel> {
             Expanded(
               child: VibeCategoryTreeView(
                 categories: widget.categoryState.categories,
+                onCategoryMoveToSlot: (id, targetId, slot) => ref
+                    .read(librarySidebarMoveServiceProvider)
+                    .moveVibeCategory(id, targetId, slot),
                 totalEntryCount: widget.libraryState.entries.length,
                 favoriteCount: widget.libraryState.favoriteCount,
                 categoryEntryCounts: widget.libraryState.categoryEntryCounts,

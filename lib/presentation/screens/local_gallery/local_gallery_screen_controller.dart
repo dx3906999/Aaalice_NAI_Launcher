@@ -24,6 +24,7 @@ import '../../providers/gallery_category_provider.dart';
 import '../../providers/gallery_scan_progress_provider.dart';
 import '../../providers/local_gallery_provider.dart';
 import '../../providers/selection_mode_provider.dart';
+import '../../services/library_sidebar_move_service.dart';
 import '../../utils/asset_protection_guard.dart';
 import '../../widgets/common/app_toast.dart';
 import '../../widgets/common/image_card_action.dart';
@@ -297,8 +298,8 @@ class LocalGalleryScreenController extends ChangeNotifier {
           .read(galleryCategoryNotifierProvider.notifier)
           .moveCategory(id, parentId),
       onCategoryMoveToSlot: (id, targetId, slot) => _ref
-          .read(galleryCategoryNotifierProvider.notifier)
-          .moveCategoryToSlot(id, targetId, slot),
+          .read(librarySidebarMoveServiceProvider)
+          .moveFolder(id, targetId, slot),
       onImagesDrop: handleImagesDrop,
       onSyncWithFileSystem: handleSyncWithFileSystem,
       onCreateAlbum: (parentId) => createAlbum(parentId),
@@ -312,8 +313,8 @@ class LocalGalleryScreenController extends ChangeNotifier {
           .read(galleryAlbumNotifierProvider.notifier)
           .moveAlbum(id, parentId),
       onAlbumMoveToSlot: (id, targetId, slot) => _ref
-          .read(galleryAlbumNotifierProvider.notifier)
-          .moveAlbumToSlot(id, targetId, slot),
+          .read(librarySidebarMoveServiceProvider)
+          .moveAlbum(id, targetId, slot),
       onImagesDropToAlbum: handleImagesDropToAlbum,
       onImagesFavoriteDrop: handleImagesFavoriteDrop,
     );

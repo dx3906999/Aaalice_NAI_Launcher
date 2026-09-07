@@ -101,6 +101,60 @@ abstract class AppLocalizations {
     Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
   ];
 
+  /// No description provided for @sidebarSort_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get sidebarSort_title;
+
+  /// No description provided for @sidebarSort_saveAfterMoveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The order was changed, but the sort preference could not be saved: {error}'**
+  String sidebarSort_saveAfterMoveFailed(String error);
+
+  /// No description provided for @sidebarSort_original.
+  ///
+  /// In en, this message translates to:
+  /// **'Original'**
+  String get sidebarSort_original;
+
+  /// No description provided for @sidebarSort_name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get sidebarSort_name;
+
+  /// No description provided for @sidebarSort_count.
+  ///
+  /// In en, this message translates to:
+  /// **'Count'**
+  String get sidebarSort_count;
+
+  /// No description provided for @sidebarSort_nameAscending.
+  ///
+  /// In en, this message translates to:
+  /// **'Name · Ascending'**
+  String get sidebarSort_nameAscending;
+
+  /// No description provided for @sidebarSort_nameDescending.
+  ///
+  /// In en, this message translates to:
+  /// **'Name · Descending'**
+  String get sidebarSort_nameDescending;
+
+  /// No description provided for @sidebarSort_countDescending.
+  ///
+  /// In en, this message translates to:
+  /// **'Count · Most first'**
+  String get sidebarSort_countDescending;
+
+  /// No description provided for @sidebarSort_countAscending.
+  ///
+  /// In en, this message translates to:
+  /// **'Count · Fewest first'**
+  String get sidebarSort_countAscending;
+
   /// No description provided for @gallery_resizeSidebar.
   ///
   /// In en, this message translates to:

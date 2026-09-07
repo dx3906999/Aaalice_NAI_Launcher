@@ -243,6 +243,8 @@ class VibeLibraryStorageService {
   Future<VibeLibraryCategory> saveCategory(VibeLibraryCategory category) =>
       _categories.save(category);
   Future<VibeLibraryCategory?> getCategory(String id) => _categories.get(id);
+  Future<void> saveCategories(List<VibeLibraryCategory> categories) =>
+      _categories.saveAll(categories);
   Future<List<VibeLibraryCategory>> getAllCategories() => _categories.getAll();
   Future<List<VibeLibraryCategory>> getRootCategories() =>
       _categories.getRoots();

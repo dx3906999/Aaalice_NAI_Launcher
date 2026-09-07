@@ -1,10 +1,8 @@
 import '../../utils/gallery_drop_reader.dart';
 export '../../utils/gallery_drop_reader.dart'
     show galleryInternalDragPathFromLocalData;
-import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../../../core/platform/platform_capabilities.dart';
@@ -16,6 +14,8 @@ import '../common/context_menu_anchor.dart';
 import '../common/themed_divider.dart';
 import 'package:nai_launcher/presentation/widgets/common/themed_input.dart';
 import 'gallery_scan_progress_panel.dart';
+import 'library_sidebar_drag_item.dart';
+import '../../utils/library_sidebar_sort.dart';
 
 enum _GalleryCategoryAction {
   rename,
@@ -51,11 +51,13 @@ class GalleryCategoryTreeView extends StatefulWidget {
   final bool includeRootNodes;
   final bool embedded;
   final bool showScanProgress;
+  final LibrarySidebarSort sort;
 
   const GalleryCategoryTreeView({
     super.key,
     required this.categories,
     required this.totalImageCount,
+    this.sort = LibrarySidebarSort.original,
     this.favoriteCount = 0,
     this.selectedCategoryId,
     required this.onCategorySelected,
@@ -78,10 +80,7 @@ class GalleryCategoryTreeView extends StatefulWidget {
 
 class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
   final Set<String> _expandedIds = {};
-  String? _hoveredCategoryId;
-  Timer? _autoExpandTimer;
   final Set<String> _superDraggingCategoryIds = {};
-  final Map<String, GalleryTreeDropSlot> _slotStates = {};
 
   @override
   void didUpdateWidget(covariant GalleryCategoryTreeView oldWidget) {
@@ -104,21 +103,6 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
       }
     }
     if (changed) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _autoExpandTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startAutoExpandTimer(String categoryId) {
-    _autoExpandTimer?.cancel();
-    _autoExpandTimer = Timer(const Duration(milliseconds: 800), () {
-      if (_hoveredCategoryId == categoryId && mounted) {
-        setState(() => _expandedIds.add(categoryId));
-      }
-    });
   }
 
   @override
@@ -154,9 +138,9 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
         ],
         if (widget.includeRootNodes && widget.categories.isNotEmpty)
           const ThemedDivider(height: 16, indent: 12, endIndent: 12),
-        ...widget.categories.rootCategories.sortedByOrder().map(
-          (category) => _buildCategoryNode(theme, category, 0),
-        ),
+        ..._sorted(
+          widget.categories.rootCategories,
+        ).map((category) => _buildCategoryNode(theme, category, 0)),
       ],
     );
 
@@ -210,7 +194,9 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
     GalleryCategory category,
     int depth,
   ) {
-    final children = widget.categories.getChildren(category.id).sortedByOrder();
+    final children = _sorted(
+      widget.categories.where((c) => c.parentId == category.id),
+    );
     final hasChildren = children.isNotEmpty;
     final isExpanded = _expandedIds.contains(category.id);
 
@@ -258,8 +244,26 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
     );
 
     if (widget.onCategoryMoveToSlot != null) {
-      categoryItem = _buildDraggableCategory(category, categoryItem);
-      categoryItem = _buildCategoryDragTarget(theme, category, categoryItem);
+      categoryItem = LibrarySidebarDragItem<GalleryCategory>(
+        key: ValueKey(('folder-drag', category.id)),
+        item: category,
+        label: category.displayName,
+        icon: Icons.folder_outlined,
+        canDrop: (source, slot) =>
+            source.id != category.id &&
+            !widget.categories.wouldCreateCycle(
+              source.id,
+              slot == GalleryTreeDropSlot.child
+                  ? category.id
+                  : category.parentId,
+            ) &&
+            !(slot == GalleryTreeDropSlot.child &&
+                source.parentId == category.id),
+        onDrop: (source, slot) =>
+            widget.onCategoryMoveToSlot!(source.id, category.id, slot),
+        onExpand: () => setState(() => _expandedIds.add(category.id)),
+        child: categoryItem,
+      );
     }
 
     categoryItem = _buildImageDropTarget(
@@ -268,6 +272,7 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
     );
 
     return Column(
+      key: ValueKey(category.id),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         categoryItem,
@@ -279,163 +284,15 @@ class _GalleryCategoryTreeViewState extends State<GalleryCategoryTreeView> {
     );
   }
 
-  Widget _buildDraggableCategory(GalleryCategory category, Widget child) {
-    final theme = Theme.of(context);
-
-    return Draggable<GalleryCategory>(
-      data: category,
-      feedback: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(8),
-        color: theme.colorScheme.surfaceContainerHigh,
-        child: Container(
-          width: 180,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.folder, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  category.displayName,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
-      onDragStarted: () => HapticFeedback.mediumImpact(),
-      onDragEnd: (_) {
-        _autoExpandTimer?.cancel();
-        setState(() => _hoveredCategoryId = null);
-      },
-      child: child,
-    );
-  }
-
-  Widget _buildCategoryDragTarget(
-    ThemeData theme,
-    GalleryCategory target,
-    Widget child,
-  ) {
-    final childKey = GlobalKey();
-
-    return DragTarget<GalleryCategory>(
-      onWillAcceptWithDetails: (details) {
-        final draggedCategory = details.data;
-        if (draggedCategory.id == target.id) return false;
-        final slot = _slotStates[target.id];
-        final chainHead = slot == GalleryTreeDropSlot.child
-            ? target.id
-            : target.parentId;
-        if (widget.categories.wouldCreateCycle(draggedCategory.id, chainHead)) {
-          return false;
-        }
-        return true;
-      },
-      onAcceptWithDetails: (details) {
-        HapticFeedback.heavyImpact();
-        final slot = _slotStates[target.id] ?? GalleryTreeDropSlot.child;
-        widget.onCategoryMoveToSlot?.call(details.data.id, target.id, slot);
-        setState(() {
-          _expandedIds.add(target.id);
-          _hoveredCategoryId = null;
-          _slotStates.remove(target.id);
-        });
-        _autoExpandTimer?.cancel();
-      },
-      onMove: (details) {
-        final box = childKey.currentContext?.findRenderObject() as RenderBox?;
-        final slot = box == null
-            ? GalleryTreeDropSlot.child
-            : _slotFor(
-                details.offset,
-                box.localToGlobal(Offset.zero) & box.size,
-              );
-        if (_hoveredCategoryId != target.id || _slotStates[target.id] != slot) {
-          setState(() {
-            _hoveredCategoryId = target.id;
-            _slotStates[target.id] = slot;
-          });
-        }
-        final hasChildren = widget.categories.getChildren(target.id).isNotEmpty;
-        if (slot == GalleryTreeDropSlot.child &&
-            hasChildren &&
-            !_expandedIds.contains(target.id)) {
-          _startAutoExpandTimer(target.id);
-        }
-      },
-      onLeave: (_) {
-        if (_hoveredCategoryId == target.id) {
-          setState(() {
-            _hoveredCategoryId = null;
-            _slotStates.remove(target.id);
-          });
-          _autoExpandTimer?.cancel();
-        }
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isAccepting = candidateData.isNotEmpty;
-        final isRejected = rejectedData.isNotEmpty;
-        final slot = _slotStates[target.id];
-        final showLineBefore =
-            isAccepting && slot == GalleryTreeDropSlot.before;
-        final showLineAfter = isAccepting && slot == GalleryTreeDropSlot.after;
-        final showChild = isAccepting && slot == GalleryTreeDropSlot.child;
-
-        return AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: showChild
-                ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                : Colors.transparent,
-            border: showChild
-                ? Border.all(color: theme.colorScheme.primary, width: 2)
-                : isRejected
-                ? Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.5),
-                    width: 1,
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (showLineBefore)
-                Container(height: 2, color: theme.colorScheme.primary),
-              KeyedSubtree(key: childKey, child: child),
-              if (showLineAfter)
-                Container(height: 2, color: theme.colorScheme.primary),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  GalleryTreeDropSlot _slotFor(Offset globalOffset, Rect rect) {
-    final local = globalOffset.dy - rect.top;
-    if (local < rect.height * 0.25) return GalleryTreeDropSlot.before;
-    if (local > rect.height * 0.75) return GalleryTreeDropSlot.after;
-    return GalleryTreeDropSlot.child;
-  }
+  List<GalleryCategory> _sorted(Iterable<GalleryCategory> categories) =>
+      sortLibrarySidebarItems(
+        categories,
+        sort: widget.sort,
+        idOf: (c) => c.id,
+        nameOf: (c) => c.name,
+        countOf: (c) => c.imageCount,
+        orderOf: (c) => c.sortOrder,
+      );
 
   Widget _buildImageDropTarget({
     required String? categoryId,

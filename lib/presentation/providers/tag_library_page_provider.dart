@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../core/storage/local_storage_service.dart';
 import '../../core/utils/app_logger.dart';
@@ -9,6 +10,9 @@ import '../../data/models/tag_library/import_plan.dart';
 import '../../data/models/tag_library/tag_library_category.dart';
 import '../../data/models/tag_library/tag_library_entry.dart';
 import 'fixed_tags_provider.dart';
+import '../../data/models/gallery/gallery_tree_drop_slot.dart';
+import '../../data/models/gallery/library_tree_order.dart';
+import '../utils/library_category_counts.dart';
 
 part 'tag_library_page_provider.g.dart';
 
@@ -106,8 +110,9 @@ class TagLibraryPageState {
           selectedCategoryId!,
           ...categories.getDescendantIds(selectedCategoryId!),
         };
-        result =
-            result.where((e) => categoryIds.contains(e.categoryId)).toList();
+        result = result
+            .where((e) => categoryIds.contains(e.categoryId))
+            .toList();
       }
     }
 
@@ -140,18 +145,18 @@ class TagLibraryPageState {
   }
 
   /// 获取指定分类的条目数量
-  int getCategoryEntryCount(String categoryId) {
-    final categoryIds = {
-      categoryId,
-      ...categories.getDescendantIds(categoryId),
-    };
-    return entries.where((e) => categoryIds.contains(e.categoryId)).length;
-  }
+  Map<String, int> get categoryEntryCounts => libraryCategoryCounts({
+    for (final category in categories) category.id: category.parentId,
+  }, entries.map((entry) => entry.categoryId));
+
+  int getCategoryEntryCount(String categoryId) =>
+      categoryEntryCounts[categoryId] ?? 0;
 }
 
 /// 词库页面 Provider
 @Riverpod(keepAlive: true)
 class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
+  final _categoryMoveLock = Lock();
   late LocalStorageService _storage;
 
   @override
@@ -295,7 +300,7 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
   }
 
   /// 更新条目（带同步）
-  /// 
+  ///
   /// 【新增】自动同步更新关联的固定词（双向同步）
   Future<void> updateEntry(
     TagLibraryEntry updatedEntry, {
@@ -305,13 +310,13 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
       updatedEntry,
       failOnPersistenceError: failOnPersistenceError,
     );
-    
+
     // 【新增】同步更新关联的固定词
     await _syncToFixedTags(updatedEntry);
   }
-  
+
   /// 【新增】更新条目（不带同步）
-  /// 
+  ///
   /// 用于从固定词反向同步时，避免循环同步
   Future<void> updateEntryWithoutSync(
     TagLibraryEntry updatedEntry, {
@@ -352,9 +357,9 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
       'TagLibraryPageProvider',
     );
   }
-  
+
   /// 【新增】同步更新关联的固定词
-  /// 
+  ///
   /// 当词库条目更新时，自动更新所有 sourceEntryId 匹配的固定词
   Future<void> _syncToFixedTags(TagLibraryEntry entry) async {
     try {
@@ -422,8 +427,10 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
 
   /// 批量删除条目
   Future<void> deleteEntries(List<String> entryIds) async {
-    final newEntries =
-        state.entries.where((e) => !entryIds.contains(e.id)).toList().reindex();
+    final newEntries = state.entries
+        .where((e) => !entryIds.contains(e.id))
+        .toList()
+        .reindex();
     state = state.copyWith(entries: newEntries);
     await _saveEntries();
   }
@@ -431,9 +438,9 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
   /// 根据ID获取条目
   TagLibraryEntry? getEntry(String entryId) {
     return state.entries.cast<TagLibraryEntry?>().firstWhere(
-          (e) => e?.id == entryId,
-          orElse: () => null,
-        );
+      (e) => e?.id == entryId,
+      orElse: () => null,
+    );
   }
 
   // ==================== 分类操作 ====================
@@ -481,8 +488,9 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
 
   /// 更新分类
   Future<void> updateCategory(TagLibraryCategory updatedCategory) async {
-    final index =
-        state.categories.indexWhere((c) => c.id == updatedCategory.id);
+    final index = state.categories.indexWhere(
+      (c) => c.id == updatedCategory.id,
+    );
     if (index == -1) return;
 
     final newCategories = [...state.categories];
@@ -517,7 +525,8 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
     state = state.copyWith(
       categories: newCategories,
       entries: newEntries,
-      clearSelectedCategory: state.selectedCategoryId != null &&
+      clearSelectedCategory:
+          state.selectedCategoryId != null &&
           categoryIds.contains(state.selectedCategoryId),
     );
 
@@ -564,49 +573,36 @@ class TagLibraryPageNotifier extends _$TagLibraryPageNotifier {
     await _saveCategories();
   }
 
-  /// 分类同级重排序
-  Future<void> reorderCategories(
-    String? parentId,
-    int oldIndex,
-    int newIndex,
-  ) async {
-    // 获取同父级的分类
-    final siblings = state.categories
-        .where((c) => c.parentId == parentId)
-        .toList()
-        .sortedByOrder();
-
-    if (oldIndex < 0 ||
-        oldIndex >= siblings.length ||
-        newIndex < 0 ||
-        newIndex >= siblings.length) {
-      return;
-    }
-
-    // 执行移动
-    final movedCategory = siblings.removeAt(oldIndex);
-    siblings.insert(newIndex, movedCategory);
-
-    // 更新 sortOrder
-    final updatedSiblings = siblings
-        .asMap()
-        .entries
-        .map((e) => e.value.copyWith(sortOrder: e.key))
-        .toList();
-
-    // 合并到完整分类列表
-    final otherCategories =
-        state.categories.where((c) => c.parentId != parentId).toList();
-
-    state =
-        state.copyWith(categories: [...otherCategories, ...updatedSiblings]);
-    await _saveCategories();
-
-    AppLogger.d(
-      'Reordered categories in parent $parentId: $oldIndex -> $newIndex',
-      'TagLibraryPageProvider',
+  Future<bool> moveCategoryToSlot(
+    String categoryId,
+    String? targetId,
+    GalleryTreeDropSlot slot, {
+    Map<String, int>? displayOrder,
+  }) => _categoryMoveLock.synchronized(() async {
+    final working = applyLibraryDisplayOrder(
+      state.categories,
+      displayOrder,
+      idOf: (c) => c.id,
+      withOrder: (c, order) => c.copyWith(sortOrder: order),
     );
-  }
+    final updated = moveLibraryTreeItem(
+      working,
+      sourceId: categoryId,
+      targetId: targetId,
+      slot: slot,
+      idOf: (c) => c.id,
+      parentOf: (c) => c.parentId,
+      orderOf: (c) => c.sortOrder,
+      withPlacement: (c, parent, order) =>
+          c.copyWith(parentId: parent, sortOrder: order),
+    );
+    if (updated == null) return false;
+    await _storage.setTagLibraryCategoriesJson(
+      jsonEncode(updated.map((c) => c.toJson()).toList()),
+    );
+    state = state.copyWith(categories: updated);
+    return true;
+  });
 
   /// 词条重排序（在当前筛选视图内）
   Future<void> reorderEntries(int oldIndex, int newIndex) async {

@@ -98,7 +98,7 @@ void main() {
     expect(favoriteY, lessThan(foldersY));
     expect(foldersY, lessThan(categoryY));
     expect(find.text('测试相簿'), findsOneWidget);
-    expect(find.text('新建'), findsNWidgets(2));
+    expect(find.byTooltip('新建'), findsNWidgets(2));
     expect(find.byType(Divider), findsNothing);
     expect(find.byType(GallerySidebarNavigationItem), findsOneWidget);
     expect(
@@ -128,7 +128,16 @@ void main() {
     final albumsHeaderSize = tester.getSize(
       find.byKey(const ValueKey('local-gallery-albums-toggle')),
     );
-    expect(allImagesSize.height, albumsHeaderSize.height);
+    expect(albumsHeaderSize.height, allImagesSize.height);
+    final createButton = tester.getRect(find.byTooltip('新建').first);
+    expect(
+      tester.getCenter(find.text('相簿')).dy,
+      closeTo(createButton.center.dy, 1),
+    );
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('sidebar-sort-albums'))).dy,
+      closeTo(createButton.center.dy, 1),
+    );
 
     final albumBottom = tester.getBottomLeft(find.text('测试相簿')).dy;
     expect(foldersY - albumBottom, lessThan(48));
@@ -161,16 +170,14 @@ void main() {
     await tester.pumpWidget(buildPanel());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('local-gallery-albums-toggle')));
+    await tester.tap(find.text('相簿'));
     await tester.pump();
 
     expect(find.text('收藏'), findsNothing);
     expect(find.text('测试相簿'), findsNothing);
     expect(find.text('测试文件夹'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const ValueKey('local-gallery-folders-toggle')),
-    );
+    await tester.tap(find.text('文件夹'));
     await tester.pump();
 
     expect(find.text('测试文件夹'), findsNothing);
@@ -215,7 +222,7 @@ void main() {
     expect(find.text('相簿'), findsOneWidget);
     expect(find.text('收藏'), findsOneWidget);
     expect(find.text('文件夹'), findsOneWidget);
-    expect(find.text('新建'), findsNWidgets(2));
+    expect(find.byTooltip('新建'), findsNWidgets(2));
     expect(scrollController.hasClients, isTrue);
     expect(
       find.byKey(const ValueKey('local-gallery-sidebar-page-header')),

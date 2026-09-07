@@ -9,6 +9,35 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get sidebarSort_title => 'Sort by';
+
+  @override
+  String sidebarSort_saveAfterMoveFailed(String error) {
+    return 'The order was changed, but the sort preference could not be saved: $error';
+  }
+
+  @override
+  String get sidebarSort_original => 'Original';
+
+  @override
+  String get sidebarSort_name => 'Name';
+
+  @override
+  String get sidebarSort_count => 'Count';
+
+  @override
+  String get sidebarSort_nameAscending => 'Name · Ascending';
+
+  @override
+  String get sidebarSort_nameDescending => 'Name · Descending';
+
+  @override
+  String get sidebarSort_countDescending => 'Count · Most first';
+
+  @override
+  String get sidebarSort_countAscending => 'Count · Fewest first';
+
+  @override
   String get gallery_resizeSidebar =>
       'Drag to resize the sidebar; use arrow keys to adjust and Home to reset';
 

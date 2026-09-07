@@ -9,6 +9,35 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get sidebarSort_title => '並び順';
+
+  @override
+  String sidebarSort_saveAfterMoveFailed(String error) {
+    return '順序は変更されましたが、並び順の設定を保存できませんでした：$error';
+  }
+
+  @override
+  String get sidebarSort_original => '元の順序';
+
+  @override
+  String get sidebarSort_name => '名前';
+
+  @override
+  String get sidebarSort_count => '件数';
+
+  @override
+  String get sidebarSort_nameAscending => '名前 · 昇順';
+
+  @override
+  String get sidebarSort_nameDescending => '名前 · 降順';
+
+  @override
+  String get sidebarSort_countDescending => '件数 · 多い順';
+
+  @override
+  String get sidebarSort_countAscending => '件数 · 少ない順';
+
+  @override
   String get gallery_resizeSidebar => 'ドラッグでサイドバーの幅を変更。矢印キーで微調整、Home で初期幅に戻す';
 
   @override
