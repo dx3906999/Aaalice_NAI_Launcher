@@ -188,6 +188,7 @@ class _CharacterPromptEditorState extends ConsumerState<CharacterPromptEditor> {
           Flexible(
             child: _EditorTab(
               label: l10n.prompt_negativePrompt,
+              isNegative: true,
               selected: _tabIndex == 1,
               onTap: () {
                 setState(() => _tabIndex = 1);
@@ -301,11 +302,13 @@ class _CharacterPromptEditorState extends ConsumerState<CharacterPromptEditor> {
 class _EditorTab extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool isNegative;
   final VoidCallback onTap;
 
   const _EditorTab({
     required this.label,
     required this.selected,
+    this.isNegative = false,
     required this.onTap,
   });
 
@@ -313,26 +316,28 @@ class _EditorTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final selectedColor = isNegative ? colorScheme.error : colorScheme.primary;
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        constraints: BoxConstraints(
+          minHeight: context.interactionPolicy.minimumControlExtent,
+        ),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? colorScheme.primary.withValues(alpha: 0.12)
+              ? selectedColor.withValues(alpha: 0.12)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: selected
-                ? colorScheme.primary
-                : colorScheme.onSurfaceVariant,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: selected ? selectedColor : colorScheme.onSurfaceVariant,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           ),
         ),

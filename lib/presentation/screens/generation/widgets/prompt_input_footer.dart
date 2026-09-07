@@ -135,8 +135,6 @@ class PromptInputFooter extends ConsumerWidget {
               ? PromptHistorySessionIds.generationNegative
               : PromptHistorySessionIds.generationPrompt,
         ),
-        if (leading != null) const SizedBox(width: 4),
-        if (leading != null) leading!,
       ],
     );
 
@@ -145,12 +143,26 @@ class PromptInputFooter extends ConsumerWidget {
       child: Row(
         children: [
           Expanded(
-            child: HorizontalActionStrip(
-              scrollKey: const ValueKey(
-                'generation_prompt_footer_actions_scroll',
+            child: LayoutBuilder(
+              builder: (context, constraints) => HorizontalActionStrip(
+                scrollKey: const ValueKey(
+                  'generation_prompt_footer_actions_scroll',
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      leadingControls,
+                      if (leading != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: leading,
+                        ),
+                    ],
+                  ),
+                ),
               ),
-
-              child: leadingControls,
             ),
           ),
           const SizedBox(width: 8),
