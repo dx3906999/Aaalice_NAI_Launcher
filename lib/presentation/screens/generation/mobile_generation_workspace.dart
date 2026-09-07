@@ -335,25 +335,27 @@ class MobileCollapsedPromptLauncher extends StatelessWidget {
                             children: [
                               if (!largeText && statusItems.isNotEmpty)
                                 Expanded(
-                                  child: SizedBox(
-                                    height: 17,
-                                    child: HorizontalActionStrip(
-                                      scrollKey: const ValueKey(
-                                        'generation-prompt-overview-statuses',
-                                      ),
-
-                                      child: Row(
-                                        children: [
-                                          for (
-                                            var index = 0;
-                                            index < statusItems.length;
-                                            index++
-                                          ) ...[
-                                            if (index > 0)
-                                              const SizedBox(width: 11),
-                                            statusItems[index],
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      height: 17,
+                                      child: HorizontalActionStrip(
+                                        scrollKey: const ValueKey(
+                                          'generation-prompt-overview-statuses',
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            for (
+                                              var index = 0;
+                                              index < statusItems.length;
+                                              index++
+                                            ) ...[
+                                              if (index > 0)
+                                                const SizedBox(width: 11),
+                                              statusItems[index],
+                                            ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
