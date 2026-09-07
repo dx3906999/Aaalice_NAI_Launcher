@@ -3,8 +3,6 @@
   "sidebarSort_saveAfterMoveFailed": "順序已調整，但無法記住排序方式：{error}",
   "@sidebarSort_saveAfterMoveFailed": {"placeholders": {"error": {"type": "String"}}},
   "sidebarSort_original": "原有順序",
-  "sidebarSort_name": "名稱",
-  "sidebarSort_count": "數量",
   "sidebarSort_nameAscending": "名稱 · 升冪",
   "sidebarSort_nameDescending": "名稱 · 降冪",
   "sidebarSort_countDescending": "數量 · 由多到少",
@@ -2040,7 +2038,6 @@
   "preciseRef_costHint": "使用精準參考會消耗額外點數",
   "preciseRef_costBadge": "消耗點數",
   "preciseRef_dropToAdd": "鬆開後新增精準參考",
-  "preciseRef_dropNoReadableImage": "拖入源未提供可讀取的圖片檔案或圖片連結",
   "preciseRef_addedCount": "已新增 {count} 個精準參考",
   "@preciseRef_addedCount": {
     "placeholders": {
@@ -2797,7 +2794,6 @@
       "count": {}
     }
   },
-  "localGallery_moveImagesFailed": "移動圖片失敗",
   "brushPreset_selectHint": "雙擊選擇此筆刷預設",
   "brushPreset_pencil": "鉛筆",
   "brushPreset_fine": "細筆",
@@ -4105,11 +4101,6 @@
   "vibeLibrary_allVibes": "全部 Vibe",
   "vibeLibrary_favorites": "收藏",
   "vibeLibrary_sendToGeneration": "傳送到生成",
-  "vibeLibrary_export": "匯出",
-  "vibeLibrary_edit": "編輯",
-  "vibeLibrary_delete": "刪除",
-  "vibeLibrary_addToFavorites": "收藏",
-  "vibeLibrary_removeFromFavorites": "取消收藏",
   "vibeLibrary_newSubCategory": "新建子分類",
   "vibeLibrary_maxVibesReached": "已達到最大數量 (16張)",
   "vibeLibrary_bundleReadFailed": "讀取 Bundle 檔案失敗，使用單檔案模式",
@@ -5058,7 +5049,6 @@
   "toast_renameSuccess": "重新命名成功",
   "toast_paramsSaved": "引數已儲存",
   "toast_paramsSaveFailed": "儲存引數失敗",
-  "toast_dropNoReadableImageOrVibe": "拖入源未提供可讀取的圖片或 Vibe 檔案",
   "toast_contentCannotBeEmpty": "內容不能為空",
   "toast_addedToLibrary": "已新增到詞庫",
   "toast_addFailed": "新增失敗: {error}",
@@ -6311,7 +6301,6 @@
       }
     }
   },
-  "imagePicker_dropNoReadableImage": "拖入源未提供可讀取的圖片檔案或圖片連結",
   "imagePicker_fileDataUnavailable": "無法讀取檔案資料",
   "imagePicker_fileSelectionFailed": "選擇檔案失敗: {error}",
   "@imagePicker_fileSelectionFailed": {
@@ -6693,7 +6682,6 @@
   "@updateAndroidDownloadedHint": {"placeholders":{"version":{}}},
   "updateAndroidInstallingHint": "正在開啟 Android 系統安裝介面，請依系統提示確認更新。",
   "updateAndroidInstallConfirmationBody": "將開啟 Android 系統安裝介面。確認安裝後，系統會替換應用且不會清除本機資料；進行中的生成和下載任務可能停止，請先儲存必要內容。",
-  "preciseRefLib_moreActions": "更多操作",
   "vibeDetail_setAsCover": "將所選圖片設為封面",
   "vibeDetail_bundleChildParameters": "正在顯示第 {index} 個子 Vibe 的匯入參數。",
   "@vibeDetail_bundleChildParameters": {"placeholders":{"index":{"type":"int"}}},

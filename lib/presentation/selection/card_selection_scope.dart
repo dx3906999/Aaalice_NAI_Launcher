@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/utils/keyboard_modifier_utils.dart';
 import '../widgets/common/image_hover_preview_controller.dart';
 import 'card_selection.dart';
 
@@ -28,8 +29,7 @@ class CardSelectionScope extends InheritedWidget {
     if (keyboard.isShiftPressed) {
       scope.commands.enter();
       scope.commands.selectRange(id, scope.orderedIds);
-    } else if (keyboard.isControlPressed ||
-        keyboard.isMetaPressed ||
+    } else if (isPrimarySelectionModifierPressed(keyboard: keyboard) ||
         scope.selection.isActive) {
       scope.commands.enter();
       scope.commands.toggle(id);
@@ -65,7 +65,7 @@ class CardSelectionShortcuts extends StatelessWidget {
       if (scope == null) return KeyEventResult.ignored;
       final keyboard = HardwareKeyboard.instance;
       if (event.logicalKey == LogicalKeyboardKey.keyA &&
-          (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+          isPrimarySelectionModifierPressed(keyboard: keyboard)) {
         scope.commands.enter();
         scope.commands.selectAll(scope.orderedIds);
       } else if (event.logicalKey == LogicalKeyboardKey.escape &&

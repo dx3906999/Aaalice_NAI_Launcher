@@ -2685,6 +2685,12 @@ class _AiTagPopularGalleryNotifier extends OnlineGalleryNotifier {
 
 class _GelbooruFavoritesGalleryNotifier extends OnlineGalleryNotifier {
   @override
+  GalleryDetail? peekDetail(GalleryItem item) => null;
+
+  @override
+  Future<void> loadPosts({bool refresh = false}) async {}
+
+  @override
   OnlineGalleryState build() {
     return const OnlineGalleryState(
       viewMode: GalleryViewMode.favorites,

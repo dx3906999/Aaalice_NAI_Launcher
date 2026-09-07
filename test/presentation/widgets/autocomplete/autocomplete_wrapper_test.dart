@@ -1216,7 +1216,9 @@ void main() {
     await tester.pump();
     await _typeCurrentText(tester, controller);
 
-    final listView = tester.widget<ListView>(find.byType(ListView));
+    final listView = tester.widget<CustomScrollView>(
+      find.byKey(const ValueKey('autocomplete-popup-list')),
+    );
     final scrollController = listView.controller!;
     final popup = find.byKey(const ValueKey('autocomplete-popup-surface'));
     final initialPopupRect = tester.getRect(popup);

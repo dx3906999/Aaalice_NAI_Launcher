@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nai_launcher/core/cache/online_gallery_prefetch_coordinator.dart';
 import 'package:nai_launcher/data/models/online_gallery/gallery_item.dart';
@@ -11,6 +12,17 @@ import 'package:nai_launcher/presentation/screens/online_gallery/online_gallery_
 import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
+  late Duration previousVisibilityUpdateInterval;
+  setUp(() {
+    previousVisibilityUpdateInterval =
+        VisibilityDetectorController.instance.updateInterval;
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+  tearDown(() {
+    VisibilityDetectorController.instance.updateInterval =
+        previousVisibilityUpdateInterval;
+  });
+
   test('scroll state changes do not notify grid listeners', () {
     final controller = OnlineGalleryScreenController(
       prefetchCoordinator: OnlineGalleryPrefetchCoordinator(
@@ -248,52 +260,54 @@ void main() {
       GalleryItem? cardItem;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 224,
-              height: 500,
-              child: OnlineGalleryGrid(
-                state: const OnlineGalleryState(
-                  searchCache: ModeCache(posts: [initial], hasMore: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 224,
+                height: 500,
+                child: OnlineGalleryGrid(
+                  state: const OnlineGalleryState(
+                    searchCache: ModeCache(posts: [initial], hasMore: false),
+                  ),
+                  controller: controller,
+                  itemBuilder: (context, index, itemWidth, columnCount) =>
+                      GalleryGridItem(
+                        post: initial,
+                        index: index,
+                        itemWidth: itemWidth,
+                        columnCount: columnCount,
+                        scrolling: controller.scrolling,
+                        anchorKey: null,
+                        onVisibilityChanged: (_) {},
+                        viewportGeneration: 0,
+                        detailRequestScope: 1,
+                        loadDetail:
+                            (
+                              _, {
+                              required priority,
+                              forceRefresh = false,
+                            }) async =>
+                                GalleryDetail(item: resolved, media: const []),
+                        buildCard:
+                            (
+                              context,
+                              item,
+                              width, {
+                              required layoutAspectRatio,
+                              required loadMedia,
+                              required mediaRequestActive,
+                              detail,
+                            }) {
+                              ratios.add(layoutAspectRatio);
+                              cardItem = item;
+                              return SizedBox(
+                                key: const ValueKey('resolved-ai-tag-card'),
+                                height: width / layoutAspectRatio,
+                              );
+                            },
+                      ),
                 ),
-                controller: controller,
-                itemBuilder: (context, index, itemWidth, columnCount) =>
-                    GalleryGridItem(
-                      post: initial,
-                      index: index,
-                      itemWidth: itemWidth,
-                      columnCount: columnCount,
-                      scrolling: controller.scrolling,
-                      anchorKey: null,
-                      onVisibilityChanged: (_) {},
-                      viewportGeneration: 0,
-                      detailRequestScope: 1,
-                      loadDetail:
-                          (
-                            _, {
-                            required priority,
-                            forceRefresh = false,
-                          }) async =>
-                              GalleryDetail(item: resolved, media: const []),
-                      buildCard:
-                          (
-                            context,
-                            item,
-                            width, {
-                            required layoutAspectRatio,
-                            required loadMedia,
-                            required mediaRequestActive,
-                            detail,
-                          }) {
-                            ratios.add(layoutAspectRatio);
-                            cardItem = item;
-                            return SizedBox(
-                              key: const ValueKey('resolved-ai-tag-card'),
-                              height: width / layoutAspectRatio,
-                            );
-                          },
-                    ),
               ),
             ),
           ),

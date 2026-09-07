@@ -119,18 +119,6 @@ abstract class AppLocalizations {
   /// **'Original'**
   String get sidebarSort_original;
 
-  /// No description provided for @sidebarSort_name.
-  ///
-  /// In en, this message translates to:
-  /// **'Name'**
-  String get sidebarSort_name;
-
-  /// No description provided for @sidebarSort_count.
-  ///
-  /// In en, this message translates to:
-  /// **'Count'**
-  String get sidebarSort_count;
-
   /// No description provided for @sidebarSort_nameAscending.
   ///
   /// In en, this message translates to:
@@ -10992,12 +10980,6 @@ abstract class AppLocalizations {
   /// **'Moved {count} images'**
   String localGallery_movedImages(Object count);
 
-  /// No description provided for @localGallery_moveImagesFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to move images'**
-  String get localGallery_moveImagesFailed;
-
   /// No description provided for @brushPreset_selectHint.
   ///
   /// In en, this message translates to:
@@ -15573,12 +15555,6 @@ abstract class AppLocalizations {
   /// **'Release to add precise reference'**
   String get preciseRef_dropToAdd;
 
-  /// No description provided for @preciseRef_dropNoReadableImage.
-  ///
-  /// In en, this message translates to:
-  /// **'The drop source did not provide a readable image file or image link'**
-  String get preciseRef_dropNoReadableImage;
-
   /// No description provided for @preciseRef_addedCount.
   ///
   /// In en, this message translates to:
@@ -15902,36 +15878,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Send to Generation'**
   String get vibeLibrary_sendToGeneration;
-
-  /// No description provided for @vibeLibrary_export.
-  ///
-  /// In en, this message translates to:
-  /// **'Export'**
-  String get vibeLibrary_export;
-
-  /// No description provided for @vibeLibrary_edit.
-  ///
-  /// In en, this message translates to:
-  /// **'Edit'**
-  String get vibeLibrary_edit;
-
-  /// No description provided for @vibeLibrary_delete.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete'**
-  String get vibeLibrary_delete;
-
-  /// No description provided for @vibeLibrary_addToFavorites.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to Favorites'**
-  String get vibeLibrary_addToFavorites;
-
-  /// No description provided for @vibeLibrary_removeFromFavorites.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove from Favorites'**
-  String get vibeLibrary_removeFromFavorites;
 
   /// No description provided for @vibeLibrary_newSubCategory.
   ///
@@ -18932,12 +18878,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to save parameters'**
   String get toast_paramsSaveFailed;
-
-  /// No description provided for @toast_dropNoReadableImageOrVibe.
-  ///
-  /// In en, this message translates to:
-  /// **'The drop source did not provide a readable image or Vibe file'**
-  String get toast_dropNoReadableImageOrVibe;
 
   /// No description provided for @toast_contentCannotBeEmpty.
   ///
@@ -22017,12 +21957,6 @@ abstract class AppLocalizations {
   /// **'Failed to read the dropped image: {error}'**
   String imagePicker_dropReadFailed(String error);
 
-  /// No description provided for @imagePicker_dropNoReadableImage.
-  ///
-  /// In en, this message translates to:
-  /// **'The dropped data does not contain a readable image file or image URL'**
-  String get imagePicker_dropNoReadableImage;
-
   /// No description provided for @imagePicker_fileDataUnavailable.
   ///
   /// In en, this message translates to:
@@ -23046,12 +22980,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Android\'s system installer will open. After you confirm, Android will replace the app without clearing local data. Active generation and download tasks may stop, so save anything important first.'**
   String get updateAndroidInstallConfirmationBody;
-
-  /// No description provided for @preciseRefLib_moreActions.
-  ///
-  /// In en, this message translates to:
-  /// **'More actions'**
-  String get preciseRefLib_moreActions;
 
   /// No description provided for @vibeDetail_setAsCover.
   ///

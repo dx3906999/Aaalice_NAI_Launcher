@@ -3,8 +3,6 @@
   "sidebarSort_saveAfterMoveFailed": "順序は変更されましたが、並び順の設定を保存できませんでした：{error}",
   "@sidebarSort_saveAfterMoveFailed": {"placeholders": {"error": {"type": "String"}}},
   "sidebarSort_original": "元の順序",
-  "sidebarSort_name": "名前",
-  "sidebarSort_count": "件数",
   "sidebarSort_nameAscending": "名前 · 昇順",
   "sidebarSort_nameDescending": "名前 · 降順",
   "sidebarSort_countDescending": "件数 · 多い順",
@@ -2719,7 +2717,6 @@
       "count": {}
     }
   },
-  "localGallery_moveImagesFailed": "画像の移動に失敗しました",
   "brushPreset_selectHint": "ダブルタップしてこのブラシ プリセットを選択します",
   "brushPreset_pencil": "鉛筆",
   "brushPreset_fine": "細筆",
@@ -3998,7 +3995,6 @@
   "preciseRef_costHint": "精密参照を使用すると追加の Anlas を消費します",
   "preciseRef_costBadge": "Anlas を使用します",
   "preciseRef_dropToAdd": "精密参照を追加するにはリリースしてください",
-  "preciseRef_dropNoReadableImage": "ドロップ ソースは読み取り可能な画像ファイルまたは画像リンクを提供しませんでした",
   "preciseRef_addedCount": "{count} 件の精密参照を追加しました",
   "@preciseRef_addedCount": {
     "placeholders": {
@@ -4130,11 +4126,6 @@
   "vibeLibrary_allVibes": "すべての Vibe",
   "vibeLibrary_favorites": "お気に入り",
   "vibeLibrary_sendToGeneration": "生成に送信",
-  "vibeLibrary_export": "エクスポート",
-  "vibeLibrary_edit": "編集",
-  "vibeLibrary_delete": "削除",
-  "vibeLibrary_addToFavorites": "お気に入りに追加",
-  "vibeLibrary_removeFromFavorites": "お気に入りから削除",
   "vibeLibrary_newSubCategory": "新しいサブカテゴリ",
   "vibeLibrary_maxVibesReached": "最大制限に達しました (16 件の Vibe)",
   "vibeLibrary_bundleReadFailed": "バンドルファイルの読み取りに失敗したため、単一ファイルモードを使用します",
@@ -5196,7 +5187,6 @@
   "toast_renameSuccess": "名前が正常に変更されました",
   "toast_paramsSaved": "パラメータが保存されました",
   "toast_paramsSaveFailed": "パラメータの保存に失敗しました",
-  "toast_dropNoReadableImageOrVibe": "ドロップ ソースは読み取り可能な画像または Vibe ファイルを提供しませんでした",
   "toast_contentCannotBeEmpty": "コンテンツを空にすることはできません",
   "toast_addedToLibrary": "ライブラリに追加されました",
   "toast_addFailed": "追加に失敗しました: {error}",
@@ -6123,7 +6113,6 @@
       "error": {"type": "String"}
     }
   },
-  "imagePicker_dropNoReadableImage": "ドロップされたデータに読み取り可能な画像ファイルまたは画像URLがありません",
   "imagePicker_fileDataUnavailable": "ファイルデータを読み込めません",
   "imagePicker_fileSelectionFailed": "ファイルの選択に失敗しました: {error}",
   "@imagePicker_fileSelectionFailed": {
@@ -6371,7 +6360,6 @@
   "@updateAndroidDownloadedHint": {"placeholders":{"version":{}}},
   "updateAndroidInstallingHint": "Android のシステムインストーラーを開いています。システムの案内に従って更新を確認してください。",
   "updateAndroidInstallConfirmationBody": "Android のシステムインストーラーを開きます。確認後、ローカルデータを消去せずにアプリが更新されます。実行中の生成・ダウンロードタスクが停止する場合があるため、必要な内容を先に保存してください。",
-  "preciseRefLib_moreActions": "その他の操作",
   "vibeDetail_setAsCover": "選択した画像をカバーに設定",
   "vibeDetail_bundleChildParameters": "子 Vibe {index} のインポートパラメーターを表示しています。",
   "@vibeDetail_bundleChildParameters": {"placeholders":{"index":{"type":"int"}}},

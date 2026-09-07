@@ -3,8 +3,6 @@
   "sidebarSort_saveAfterMoveFailed": "The order was changed, but the sort preference could not be saved: {error}",
   "@sidebarSort_saveAfterMoveFailed": {"placeholders": {"error": {"type": "String"}}},
   "sidebarSort_original": "Original",
-  "sidebarSort_name": "Name",
-  "sidebarSort_count": "Count",
   "sidebarSort_nameAscending": "Name · Ascending",
   "sidebarSort_nameDescending": "Name · Descending",
   "sidebarSort_countDescending": "Count · Most first",
@@ -2758,7 +2756,6 @@
       "count": {}
     }
   },
-  "localGallery_moveImagesFailed": "Failed to move images",
 
   "brushPreset_selectHint": "Double tap to select this brush preset",
   "brushPreset_pencil": "Pencil",
@@ -4051,7 +4048,6 @@
   "preciseRef_costHint": "Using Precise Reference consumes extra Anlas",
   "preciseRef_costBadge": "Uses Anlas",
   "preciseRef_dropToAdd": "Release to add precise reference",
-  "preciseRef_dropNoReadableImage": "The drop source did not provide a readable image file or image link",
   "preciseRef_addedCount": "Added {count} precise references",
   "@preciseRef_addedCount": {
     "placeholders": {
@@ -4180,11 +4176,6 @@
   "vibeLibrary_allVibes": "All Vibes",
   "vibeLibrary_favorites": "Favorites",
   "vibeLibrary_sendToGeneration": "Send to Generation",
-  "vibeLibrary_export": "Export",
-  "vibeLibrary_edit": "Edit",
-  "vibeLibrary_delete": "Delete",
-  "vibeLibrary_addToFavorites": "Add to Favorites",
-  "vibeLibrary_removeFromFavorites": "Remove from Favorites",
   "vibeLibrary_newSubCategory": "New Subcategory",
   "vibeLibrary_maxVibesReached": "Maximum limit reached (16 vibes)",
   "vibeLibrary_bundleReadFailed": "Failed to read bundle file, using single file mode",
@@ -5176,7 +5167,6 @@
   "toast_renameSuccess": "Renamed successfully",
   "toast_paramsSaved": "Parameters saved",
   "toast_paramsSaveFailed": "Failed to save parameters",
-  "toast_dropNoReadableImageOrVibe": "The drop source did not provide a readable image or Vibe file",
   "toast_contentCannotBeEmpty": "Content cannot be empty",
   "toast_addedToLibrary": "Added to library",
   "toast_addFailed": "Add failed: {error}",
@@ -6098,7 +6088,6 @@
       "error": {"type": "String"}
     }
   },
-  "imagePicker_dropNoReadableImage": "The dropped data does not contain a readable image file or image URL",
   "imagePicker_fileDataUnavailable": "Unable to read file data",
   "imagePicker_fileSelectionFailed": "Failed to select file: {error}",
   "@imagePicker_fileSelectionFailed": {
@@ -6346,7 +6335,6 @@
   "@updateAndroidDownloadedHint": {"placeholders":{"version":{}}},
   "updateAndroidInstallingHint": "Opening Android's system installer. Follow the system prompt to confirm the update.",
   "updateAndroidInstallConfirmationBody": "Android's system installer will open. After you confirm, Android will replace the app without clearing local data. Active generation and download tasks may stop, so save anything important first.",
-  "preciseRefLib_moreActions": "More actions",
   "vibeDetail_setAsCover": "Set selected image as cover",
   "vibeDetail_bundleChildParameters": "Showing import parameters for child Vibe {index}.",
   "@vibeDetail_bundleChildParameters": {"placeholders":{"index":{"type":"int"}}},

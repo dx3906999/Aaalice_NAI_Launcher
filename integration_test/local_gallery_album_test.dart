@@ -10,7 +10,6 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:nai_launcher/data/models/gallery/gallery_album.dart';
 import 'package:nai_launcher/data/models/gallery/gallery_category.dart';
-import 'package:nai_launcher/data/models/gallery/local_image_record.dart';
 import 'package:nai_launcher/l10n/app_localizations.dart';
 import 'package:nai_launcher/presentation/providers/gallery_album_provider.dart';
 import 'package:nai_launcher/presentation/providers/gallery_category_provider.dart';
@@ -19,7 +18,12 @@ import 'package:nai_launcher/presentation/providers/selection_mode_provider.dart
 import 'package:nai_launcher/presentation/screens/local_gallery/local_gallery_category_panel.dart';
 import 'package:nai_launcher/presentation/widgets/common/desktop_window_frame.dart';
 import 'package:nai_launcher/presentation/widgets/gallery/local_gallery_toolbar.dart';
+import 'package:nai_launcher/presentation/widgets/common/image_card_action.dart';
 import 'package:hive/hive.dart';
+import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:nai_launcher/presentation/widgets/common/card_drag_source.dart';
+
+import '../test/helpers/card_drop_test_utils.dart';
 
 bool _removedClicked = false;
 
@@ -55,10 +59,8 @@ class _ActiveSelectionNotifier extends LocalGallerySelectionNotifier {
 
 /// 本地图库相簿侧栏集成测试（Windows 真实窗口）。
 ///
-/// 覆盖：侧栏层级渲染、相簿选择、应用内卡片拖拽加入相簿（Flutter
-/// 拖拽协议），并在窄/宽两个断点截图落盘供视觉验收。
-/// OS 级文件拖放（super_drag_and_drop DropRegion）无法在集成测试中
-/// 模拟，由人工验收。
+/// 覆盖侧栏层级、选择与原生放置事件的业务接收，并保存窄/宽屏截图。
+/// 系统鼠标拖放由人工验收；注入放置事件不验证 OS 手势分发。
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
@@ -103,10 +105,13 @@ void main() {
     void Function(String albumId, String imagePath)? onDrop,
     ValueChanged<String?>? onAlbumSelected,
   }) {
-    final record = LocalImageRecord(
-      path: 'gallery/drag-source.png',
-      size: 42,
-      modifiedAt: now,
+    const resource = CardDragResource(
+      id: 'drag-source',
+      fileName: 'drag-source.png',
+      localData: {
+        'source': 'gallery_internal',
+        'path': 'gallery/drag-source.png',
+      },
     );
 
     final panel = LocalGalleryCategoryPanel(
@@ -123,7 +128,7 @@ void main() {
       onCategoryDelete: (_) async {},
       onAddSubCategory: (_) async {},
       onCategoryMove: (_, _) async {},
-      onImageDrop: (_, _) async {},
+      onImagesDrop: (_, _) async {},
       onSyncWithFileSystem: () async {},
       onCreateAlbum: (_) async {},
       onAlbumSelected: onAlbumSelected ?? (_) {},
@@ -133,19 +138,15 @@ void main() {
       onAlbumMove: (_, _) async => true,
       onAlbumMoveToSlot: (_, _, _) async => true,
       onCategoryMoveToSlot: (_, _, _) async => true,
-      onImageDropToAlbum: (imagePath, albumId) async {
-        onDrop?.call(albumId, imagePath);
+      onImagesDropToAlbum: (imagePaths, albumId) async {
+        for (final imagePath in imagePaths) {
+          onDrop?.call(albumId, imagePath);
+        }
       },
     );
 
-    final gridTile = Draggable<LocalImageRecord>(
-      data: record,
-      feedback: SizedBox(
-        width: 72,
-        height: 72,
-        child: Container(color: Colors.blueGrey, child: const FlutterLogo()),
-      ),
-      childWhenDragging: const SizedBox(width: 72, height: 72),
+    final gridTile = CardDragSource(
+      resource: () => resource,
       child: Container(
         width: 72,
         height: 72,
@@ -229,7 +230,7 @@ void main() {
     await savePng('wide-hierarchy');
   });
 
-  testWidgets('应用内拖拽卡片到相簿触发加入', (tester) async {
+  testWidgets('应用内卡片放置事件向子相簿传递图片路径', (tester) async {
     await tester.binding.setSurfaceSize(const Size(840, 760));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -254,20 +255,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('子相簿'), findsOneWidget);
 
-    final dragStart = tester.getCenter(find.text('拖我'));
-    final dropTarget = tester.getCenter(find.text('子相簿'));
-    final gesture = await tester.startGesture(dragStart);
-    // 位移需超过触摸阈值，Draggable 才会开始拖拽
-    await gesture.moveBy(const Offset(40, 0));
-    await tester.pump(const Duration(milliseconds: 100));
-    // 分步移动到目标，让 DragTarget 逐帧识别悬停
-    final delta = (dropTarget - (dragStart + const Offset(40, 0))) / 10;
-    for (var i = 0; i < 10; i++) {
-      await gesture.moveBy(delta);
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await tester.pump(const Duration(milliseconds: 100));
-    await gesture.up();
+    final source = tester.widget<CardDragSource>(find.byType(CardDragSource));
+    final session = TestCardDropSession([
+      TestCardDropItem(localData: source.resource().payload),
+    ]);
+    addTearDown(session.dispose);
+    final target = tester.widget<DropRegion>(
+      find
+          .ancestor(of: find.text('子相簿'), matching: find.byType(DropRegion))
+          .first,
+    );
+    await target.onPerformDrop(
+      PerformDropEvent(
+        session: session,
+        position: testCardDropPosition,
+        acceptedOperation: DropOperation.copy,
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(droppedAlbum, 'album-1-1');
@@ -323,7 +327,15 @@ void main() {
           home: Scaffold(
             body: LocalGalleryToolbar(
               enableSearchAutocomplete: false,
-              onRemoveFromAlbum: _markRemoved,
+              batchActions: [
+                ImageCardAction(
+                  id: ImageCardActionId.removeFromAlbum,
+                  icon: Icons.remove_circle_outline,
+                  label: '移出相簿',
+                  invoke: _markRemoved,
+                  supportsBatch: true,
+                ),
+              ],
             ),
           ),
         ),
@@ -386,10 +398,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // 菜单面板（菜单项最近的 Material 祖先）原点应贴合点击点
-    final menuPanel = find.ancestor(
-      of: find.byWidgetPredicate((widget) => widget is PopupMenuItem),
-      matching: find.byType(Material),
-    ).first;
+    final menuPanel = find
+        .ancestor(
+          of: find.byWidgetPredicate((widget) => widget is PopupMenuItem),
+          matching: find.byType(Material),
+        )
+        .first;
     final panelTopLeft = tester.getTopLeft(menuPanel);
     expect((panelTopLeft - tapPosition).distance, lessThan(1.0));
     await savePng('context-menu-at-click');

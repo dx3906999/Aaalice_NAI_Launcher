@@ -20,12 +20,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sidebarSort_original => '原有顺序';
 
   @override
-  String get sidebarSort_name => '名称';
-
-  @override
-  String get sidebarSort_count => '数量';
-
-  @override
   String get sidebarSort_nameAscending => '名称 · 升序';
 
   @override
@@ -5920,9 +5914,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get localGallery_moveImagesFailed => '移动图片失败';
-
-  @override
   String get brushPreset_selectHint => '双击选择此笔刷预设';
 
   @override
@@ -8436,9 +8427,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preciseRef_dropToAdd => '松开后添加精准参考';
 
   @override
-  String get preciseRef_dropNoReadableImage => '拖入源未提供可读取的图片文件或图片链接';
-
-  @override
   String preciseRef_addedCount(int count) {
     return '已添加 $count 个精准参考';
   }
@@ -8630,21 +8618,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get vibeLibrary_sendToGeneration => '发送到生成';
-
-  @override
-  String get vibeLibrary_export => '导出';
-
-  @override
-  String get vibeLibrary_edit => '编辑';
-
-  @override
-  String get vibeLibrary_delete => '删除';
-
-  @override
-  String get vibeLibrary_addToFavorites => '收藏';
-
-  @override
-  String get vibeLibrary_removeFromFavorites => '取消收藏';
 
   @override
   String get vibeLibrary_newSubCategory => '新建子分类';
@@ -10373,9 +10346,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toast_paramsSaveFailed => '保存参数失败';
 
   @override
-  String get toast_dropNoReadableImageOrVibe => '拖入源未提供可读取的图片或 Vibe 文件';
-
-  @override
   String get toast_contentCannotBeEmpty => '内容不能为空';
 
   @override
@@ -12100,9 +12070,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get imagePicker_dropNoReadableImage => '拖入源未提供可读取的图片文件或图片链接';
-
-  @override
   String get imagePicker_fileDataUnavailable => '无法读取文件数据';
 
   @override
@@ -12692,9 +12659,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get updateAndroidInstallConfirmationBody =>
       '将打开 Android 系统安装界面。确认安装后，系统会替换应用且不会清除本地数据；进行中的生成和下载任务可能停止，请先保存必要内容。';
-
-  @override
-  String get preciseRefLib_moreActions => '更多操作';
 
   @override
   String get vibeDetail_setAsCover => '将所选图片设为封面';
@@ -14628,12 +14592,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get sidebarSort_original => '原有順序';
-
-  @override
-  String get sidebarSort_name => '名稱';
-
-  @override
-  String get sidebarSort_count => '數量';
 
   @override
   String get sidebarSort_nameAscending => '名稱 · 升冪';
@@ -20530,9 +20488,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
-  String get localGallery_moveImagesFailed => '移動圖片失敗';
-
-  @override
   String get brushPreset_selectHint => '雙擊選擇此筆刷預設';
 
   @override
@@ -23046,9 +23001,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get preciseRef_dropToAdd => '鬆開後新增精準參考';
 
   @override
-  String get preciseRef_dropNoReadableImage => '拖入源未提供可讀取的圖片檔案或圖片連結';
-
-  @override
   String preciseRef_addedCount(int count) {
     return '已新增 $count 個精準參考';
   }
@@ -23240,21 +23192,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get vibeLibrary_sendToGeneration => '傳送到生成';
-
-  @override
-  String get vibeLibrary_export => '匯出';
-
-  @override
-  String get vibeLibrary_edit => '編輯';
-
-  @override
-  String get vibeLibrary_delete => '刪除';
-
-  @override
-  String get vibeLibrary_addToFavorites => '收藏';
-
-  @override
-  String get vibeLibrary_removeFromFavorites => '取消收藏';
 
   @override
   String get vibeLibrary_newSubCategory => '新建子分類';
@@ -24983,9 +24920,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get toast_paramsSaveFailed => '儲存引數失敗';
 
   @override
-  String get toast_dropNoReadableImageOrVibe => '拖入源未提供可讀取的圖片或 Vibe 檔案';
-
-  @override
   String get toast_contentCannotBeEmpty => '內容不能為空';
 
   @override
@@ -26710,9 +26644,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
-  String get imagePicker_dropNoReadableImage => '拖入源未提供可讀取的圖片檔案或圖片連結';
-
-  @override
   String get imagePicker_fileDataUnavailable => '無法讀取檔案資料';
 
   @override
@@ -27303,9 +27234,6 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   @override
   String get updateAndroidInstallConfirmationBody =>
       '將開啟 Android 系統安裝介面。確認安裝後，系統會替換應用且不會清除本機資料；進行中的生成和下載任務可能停止，請先儲存必要內容。';
-
-  @override
-  String get preciseRefLib_moreActions => '更多操作';
 
   @override
   String get vibeDetail_setAsCover => '將所選圖片設為封面';

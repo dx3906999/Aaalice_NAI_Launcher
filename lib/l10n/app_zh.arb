@@ -3,8 +3,6 @@
   "sidebarSort_saveAfterMoveFailed": "顺序已调整，但未能记住排序方式：{error}",
   "@sidebarSort_saveAfterMoveFailed": {"placeholders": {"error": {"type": "String"}}},
   "sidebarSort_original": "原有顺序",
-  "sidebarSort_name": "名称",
-  "sidebarSort_count": "数量",
   "sidebarSort_nameAscending": "名称 · 升序",
   "sidebarSort_nameDescending": "名称 · 降序",
   "sidebarSort_countDescending": "数量 · 从多到少",
@@ -2012,7 +2010,6 @@
   "preciseRef_costHint": "使用精准参考会消耗额外点数",
   "preciseRef_costBadge": "消耗点数",
   "preciseRef_dropToAdd": "松开后添加精准参考",
-  "preciseRef_dropNoReadableImage": "拖入源未提供可读取的图片文件或图片链接",
   "preciseRef_addedCount": "已添加 {count} 个精准参考",
   "@preciseRef_addedCount": {
     "placeholders": {
@@ -2786,7 +2783,6 @@
       "count": {}
     }
   },
-  "localGallery_moveImagesFailed": "移动图片失败",
 
   "brushPreset_selectHint": "双击选择此笔刷预设",
   "brushPreset_pencil": "铅笔",
@@ -4095,11 +4091,6 @@
   "vibeLibrary_allVibes": "全部 Vibe",
   "vibeLibrary_favorites": "收藏",
   "vibeLibrary_sendToGeneration": "发送到生成",
-  "vibeLibrary_export": "导出",
-  "vibeLibrary_edit": "编辑",
-  "vibeLibrary_delete": "删除",
-  "vibeLibrary_addToFavorites": "收藏",
-  "vibeLibrary_removeFromFavorites": "取消收藏",
   "vibeLibrary_newSubCategory": "新建子分类",
   "vibeLibrary_maxVibesReached": "已达到最大数量 (16张)",
   "vibeLibrary_bundleReadFailed": "读取 Bundle 文件失败，使用单文件模式",
@@ -4969,7 +4960,6 @@
   "toast_renameSuccess": "重命名成功",
   "toast_paramsSaved": "参数已保存",
   "toast_paramsSaveFailed": "保存参数失败",
-  "toast_dropNoReadableImageOrVibe": "拖入源未提供可读取的图片或 Vibe 文件",
   "toast_contentCannotBeEmpty": "内容不能为空",
   "toast_addedToLibrary": "已添加到词库",
   "toast_addFailed": "添加失败: {error}",
@@ -6167,7 +6157,6 @@
       "error": {"type": "String"}
     }
   },
-  "imagePicker_dropNoReadableImage": "拖入源未提供可读取的图片文件或图片链接",
   "imagePicker_fileDataUnavailable": "无法读取文件数据",
   "imagePicker_fileSelectionFailed": "选择文件失败: {error}",
   "@imagePicker_fileSelectionFailed": {
@@ -6415,7 +6404,6 @@
   "@updateAndroidDownloadedHint": {"placeholders":{"version":{}}},
   "updateAndroidInstallingHint": "正在打开 Android 系统安装界面，请按系统提示确认更新。",
   "updateAndroidInstallConfirmationBody": "将打开 Android 系统安装界面。确认安装后，系统会替换应用且不会清除本地数据；进行中的生成和下载任务可能停止，请先保存必要内容。",
-  "preciseRefLib_moreActions": "更多操作",
   "vibeDetail_setAsCover": "将所选图片设为封面",
   "vibeDetail_bundleChildParameters": "正在显示第 {index} 个子 Vibe 的导入参数。",
   "@vibeDetail_bundleChildParameters": {"placeholders":{"index":{"type":"int"}}},

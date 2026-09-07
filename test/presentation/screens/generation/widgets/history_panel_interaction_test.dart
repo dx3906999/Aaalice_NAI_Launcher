@@ -164,7 +164,7 @@ void main() {
     },
   );
 
-  testWidgets('linked long press opens the merged sequence at its image', (
+  testWidgets('linked long press selects its image for bulk actions', (
     tester,
   ) async {
     final container = _createContainer([
@@ -180,7 +180,8 @@ void main() {
     await tester.longPress(second);
     await _pumpRoute(tester);
 
-    _expectLinkedViewer(tester, initialIndex: 1);
+    expect(tester.widget<SelectableImageCard>(second).isSelected, isTrue);
+    expect(find.byType(ImageDetailViewer), findsNothing);
   });
 
   testWidgets('linked context detail opens the merged sequence at its image', (

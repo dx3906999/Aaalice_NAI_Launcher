@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nai_launcher/core/cache/online_gallery_detail_coordinator.dart';
 import 'package:nai_launcher/data/models/online_gallery/gallery_item.dart';
@@ -444,43 +445,45 @@ Widget _app({
   ValueChanged<double>? onLayoutAspectRatio,
   double containerHeight = 200,
 }) {
-  return MaterialApp(
-    locale: const Locale('en'),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(
-      body: SizedBox(
-        width: 200,
-        height: containerHeight,
-        child: GalleryGridItem(
-          post: post,
-          index: 0,
-          itemWidth: 200,
-          columnCount: 1,
-          scrolling: const AlwaysStoppedAnimation(false),
-          anchorKey: null,
-          onVisibilityChanged: (_) {},
-          viewportGeneration: viewportGeneration,
-          detailRequestScope: detailRequestScope,
-          loadDetail: loadDetail,
-          buildCard:
-              (
-                context,
-                item,
-                itemWidth, {
-                required layoutAspectRatio,
-                required loadMedia,
-                required mediaRequestActive,
-                detail,
-              }) {
-                onBuildCard?.call(loadMedia);
-                onMediaRequestActive?.call(mediaRequestActive);
-                onLayoutAspectRatio?.call(layoutAspectRatio);
-                return SizedBox(
-                  key: const ValueKey('resolved-card'),
-                  height: itemWidth / layoutAspectRatio,
-                );
-              },
+  return ProviderScope(
+    child: MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: SizedBox(
+          width: 200,
+          height: containerHeight,
+          child: GalleryGridItem(
+            post: post,
+            index: 0,
+            itemWidth: 200,
+            columnCount: 1,
+            scrolling: const AlwaysStoppedAnimation(false),
+            anchorKey: null,
+            onVisibilityChanged: (_) {},
+            viewportGeneration: viewportGeneration,
+            detailRequestScope: detailRequestScope,
+            loadDetail: loadDetail,
+            buildCard:
+                (
+                  context,
+                  item,
+                  itemWidth, {
+                  required layoutAspectRatio,
+                  required loadMedia,
+                  required mediaRequestActive,
+                  detail,
+                }) {
+                  onBuildCard?.call(loadMedia);
+                  onMediaRequestActive?.call(mediaRequestActive);
+                  onLayoutAspectRatio?.call(layoutAspectRatio);
+                  return SizedBox(
+                    key: const ValueKey('resolved-card'),
+                    height: itemWidth / layoutAspectRatio,
+                  );
+                },
+          ),
         ),
       ),
     ),

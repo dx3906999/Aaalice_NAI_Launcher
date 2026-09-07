@@ -20,12 +20,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sidebarSort_original => 'Original';
 
   @override
-  String get sidebarSort_name => 'Name';
-
-  @override
-  String get sidebarSort_count => 'Count';
-
-  @override
   String get sidebarSort_nameAscending => 'Name · Ascending';
 
   @override
@@ -6177,9 +6171,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get localGallery_moveImagesFailed => 'Failed to move images';
-
-  @override
   String get brushPreset_selectHint => 'Double tap to select this brush preset';
 
   @override
@@ -8774,10 +8765,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get preciseRef_dropToAdd => 'Release to add precise reference';
 
   @override
-  String get preciseRef_dropNoReadableImage =>
-      'The drop source did not provide a readable image file or image link';
-
-  @override
   String preciseRef_addedCount(int count) {
     return 'Added $count precise references';
   }
@@ -8972,21 +8959,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vibeLibrary_sendToGeneration => 'Send to Generation';
-
-  @override
-  String get vibeLibrary_export => 'Export';
-
-  @override
-  String get vibeLibrary_edit => 'Edit';
-
-  @override
-  String get vibeLibrary_delete => 'Delete';
-
-  @override
-  String get vibeLibrary_addToFavorites => 'Add to Favorites';
-
-  @override
-  String get vibeLibrary_removeFromFavorites => 'Remove from Favorites';
 
   @override
   String get vibeLibrary_newSubCategory => 'New Subcategory';
@@ -10802,10 +10774,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toast_paramsSaveFailed => 'Failed to save parameters';
-
-  @override
-  String get toast_dropNoReadableImageOrVibe =>
-      'The drop source did not provide a readable image or Vibe file';
 
   @override
   String get toast_contentCannotBeEmpty => 'Content cannot be empty';
@@ -12628,10 +12596,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get imagePicker_dropNoReadableImage =>
-      'The dropped data does not contain a readable image file or image URL';
-
-  @override
   String get imagePicker_fileDataUnavailable => 'Unable to read file data';
 
   @override
@@ -13258,9 +13222,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateAndroidInstallConfirmationBody =>
       'Android\'s system installer will open. After you confirm, Android will replace the app without clearing local data. Active generation and download tasks may stop, so save anything important first.';
-
-  @override
-  String get preciseRefLib_moreActions => 'More actions';
 
   @override
   String get vibeDetail_setAsCover => 'Set selected image as cover';

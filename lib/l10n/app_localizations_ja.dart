@@ -20,12 +20,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sidebarSort_original => '元の順序';
 
   @override
-  String get sidebarSort_name => '名前';
-
-  @override
-  String get sidebarSort_count => '件数';
-
-  @override
   String get sidebarSort_nameAscending => '名前 · 昇順';
 
   @override
@@ -6025,9 +6019,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get localGallery_moveImagesFailed => '画像の移動に失敗しました';
-
-  @override
   String get brushPreset_selectHint => 'ダブルタップしてこのブラシ プリセットを選択します';
 
   @override
@@ -8564,10 +8555,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get preciseRef_dropToAdd => '精密参照を追加するにはリリースしてください';
 
   @override
-  String get preciseRef_dropNoReadableImage =>
-      'ドロップ ソースは読み取り可能な画像ファイルまたは画像リンクを提供しませんでした';
-
-  @override
   String preciseRef_addedCount(int count) {
     return '$count 件の精密参照を追加しました';
   }
@@ -8759,21 +8746,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get vibeLibrary_sendToGeneration => '生成に送信';
-
-  @override
-  String get vibeLibrary_export => 'エクスポート';
-
-  @override
-  String get vibeLibrary_edit => '編集';
-
-  @override
-  String get vibeLibrary_delete => '削除';
-
-  @override
-  String get vibeLibrary_addToFavorites => 'お気に入りに追加';
-
-  @override
-  String get vibeLibrary_removeFromFavorites => 'お気に入りから削除';
 
   @override
   String get vibeLibrary_newSubCategory => '新しいサブカテゴリ';
@@ -10551,10 +10523,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get toast_paramsSaveFailed => 'パラメータの保存に失敗しました';
 
   @override
-  String get toast_dropNoReadableImageOrVibe =>
-      'ドロップ ソースは読み取り可能な画像または Vibe ファイルを提供しませんでした';
-
-  @override
   String get toast_contentCannotBeEmpty => 'コンテンツを空にすることはできません';
 
   @override
@@ -12307,10 +12275,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get imagePicker_dropNoReadableImage =>
-      'ドロップされたデータに読み取り可能な画像ファイルまたは画像URLがありません';
-
-  @override
   String get imagePicker_fileDataUnavailable => 'ファイルデータを読み込めません';
 
   @override
@@ -12913,9 +12877,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get updateAndroidInstallConfirmationBody =>
       'Android のシステムインストーラーを開きます。確認後、ローカルデータを消去せずにアプリが更新されます。実行中の生成・ダウンロードタスクが停止する場合があるため、必要な内容を先に保存してください。';
-
-  @override
-  String get preciseRefLib_moreActions => 'その他の操作';
 
   @override
   String get vibeDetail_setAsCover => '選択した画像をカバーに設定';
