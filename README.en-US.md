@@ -4,6 +4,11 @@
   <a href="README.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · English
 </p>
 
+> [!WARNING]
+> **Project updates paused (2026-09-08)**
+>
+> NovelAI has restricted my account: my subscription was canceled, and I can no longer make purchases or subscribe. I still do not understand the specific reason for this action, so I have decided to pause updates to this project.
+
 <p align="center">
   <img src="assets/icons/Icon.png" alt="NAI Launcher icon" width="112">
 </p>
