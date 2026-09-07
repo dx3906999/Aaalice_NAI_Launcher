@@ -7041,5 +7041,15 @@
   "dlss_localAdjustments": "局部调整",
   "dlss_modelStrengths": "模型强度",
   "dlss_modelSwitches": "模型开关",
-  "dlss_activation": "启用与自动处理"
+  "dlss_activation": "启用与自动处理",
+  "settings_subscriptionExpiresOn": "会员到期日期：{date}",
+  "@settings_subscriptionExpiresOn": {
+    "description": "Subscription expiry date in the device local time zone.",
+    "placeholders": {
+      "date": {
+        "type": "DateTime",
+        "format": "yMMMd"
+      }
+    }
+  }
 }

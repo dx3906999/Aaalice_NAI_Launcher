@@ -14604,6 +14604,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dlss_activation => '启用与自动处理';
+
+  @override
+  String settings_subscriptionExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return '会员到期日期：$dateString';
+  }
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -29207,4 +29215,12 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get dlss_activation => '啟用與自動處理';
+
+  @override
+  String settings_subscriptionExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return '會員到期日期：$dateString';
+  }
 }

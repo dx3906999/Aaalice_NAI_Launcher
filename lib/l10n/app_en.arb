@@ -6972,5 +6972,15 @@
   "dlss_localAdjustments": "Local adjustments",
   "dlss_modelStrengths": "Model strengths",
   "dlss_modelSwitches": "Model options",
-  "dlss_activation": "Activation and automation"
+  "dlss_activation": "Activation and automation",
+  "settings_subscriptionExpiresOn": "Subscription expiry: {date}",
+  "@settings_subscriptionExpiresOn": {
+    "description": "Subscription expiry date in the device local time zone.",
+    "placeholders": {
+      "date": {
+        "type": "DateTime",
+        "format": "yMMMd"
+      }
+    }
+  }
 }

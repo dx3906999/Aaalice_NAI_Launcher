@@ -186,6 +186,18 @@ class AccountDetailTile extends ConsumerWidget {
                 ],
               ),
             ),
+            if (subscription.tier > 0 && (subscription.expiresAt ?? 0) > 0)
+              Text(
+                context.l10n.settings_subscriptionExpiresOn(
+                  DateTime.fromMillisecondsSinceEpoch(
+                    subscription.expiresAt! * 1000,
+                  ),
+                ),
+                key: const Key('account-subscription-expiry'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
           ],
         );
       },

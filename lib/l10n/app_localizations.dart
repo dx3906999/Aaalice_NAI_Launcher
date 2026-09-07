@@ -26604,6 +26604,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Activation and automation'**
   String get dlss_activation;
+
+  /// Subscription expiry date in the device local time zone.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription expiry: {date}'**
+  String settings_subscriptionExpiresOn(DateTime date);
 }
 
 class _AppLocalizationsDelegate

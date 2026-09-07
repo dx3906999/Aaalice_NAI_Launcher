@@ -8,6 +8,7 @@ import '../../../core/services/avatar_service.dart';
 import '../../../data/models/auth/saved_account.dart';
 import '../../adaptive/adaptive_presenter.dart';
 import '../../adaptive/interaction_policy.dart';
+import '../../adaptive/content_sized_adaptive_form.dart';
 import '../../providers/account_manager_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/account_avatar.dart';
@@ -15,23 +16,18 @@ import '../common/app_toast.dart';
 import '../common/themed_divider.dart';
 import 'nickname_edit_dialog.dart';
 
-/// 账号资料底部操作面板
-///
-/// 用于编辑账号头像、昵称等资料
-/// 参考 TagBottomActionSheet 的设计规范：
-/// - 毛玻璃背景效果
-/// - 顶部拖动指示条
-/// - 20px 顶部圆角
-/// - isScrollControlled: true
+/// 账号资料编辑面板，按内容收紧并在可用高度不足时滚动。
 class AccountProfileBottomSheet extends ConsumerStatefulWidget {
   /// 当前账号
   final SavedAccount account;
   final bool presentationManaged;
+  final ScrollController? scrollController;
 
   const AccountProfileBottomSheet({
     super.key,
     required this.account,
     this.presentationManaged = false,
+    this.scrollController,
   });
 
   /// 显示底部操作面板
@@ -61,6 +57,7 @@ class AccountProfileBottomSheet extends ConsumerStatefulWidget {
       builder: (panelContext, scrollController) => AccountProfileBottomSheet(
         account: account,
         presentationManaged: true,
+        scrollController: scrollController,
       ),
     );
   }
@@ -274,63 +271,55 @@ class _AccountProfileBottomSheetState
     final isDefaultAccount = defaultAccount?.id == currentAccount.id;
     final hasMultipleAccounts = accounts.length > 1;
 
-    final content = Column(
-      mainAxisSize: widget.presentationManaged
-          ? MainAxisSize.max
-          : MainAxisSize.min,
-      children: [
+    final content = ContentSizedAdaptiveForm(
+      scrollController: widget.scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      footer: isCurrentAccount ? _buildLogoutFooter(context) : null,
+      content: [
         if (!widget.presentationManaged)
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.outlineVariant,
-              borderRadius: BorderRadius.circular(2),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
-        Flexible(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 16),
-                // 大头像
-                _buildAvatarSection(context),
-                const SizedBox(height: 24),
-                // 头像操作按钮
-                _buildAvatarActions(context),
-                const SizedBox(height: 16),
-                // 分割线
-                const ThemedDivider(),
-                const SizedBox(height: 16),
-                // 昵称行
-                _buildNicknameRow(context),
-                const SizedBox(height: 8),
-                // 账号详情
-                _buildAccountDetails(context),
-                const SizedBox(height: 16),
-                // 设为默认（多账号时显示）
-                if (hasMultipleAccounts) ...[
-                  _buildSetAsDefaultRow(context, isDefaultAccount),
-                  const SizedBox(height: 16),
-                ],
-                // 多账号列表
-                if (hasMultipleAccounts) ...[
-                  _buildAccountsList(
-                    context,
-                    accounts,
-                    currentAccountId,
-                    currentAccount,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ],
-            ),
+
+        const SizedBox(height: 16),
+        // 大头像
+        _buildAvatarSection(context),
+        const SizedBox(height: 24),
+        // 头像操作按钮
+        _buildAvatarActions(context),
+        const SizedBox(height: 16),
+        // 分割线
+        const ThemedDivider(),
+        const SizedBox(height: 16),
+        // 昵称行
+        _buildNicknameRow(context),
+        const SizedBox(height: 8),
+        // 账号详情
+        _buildAccountDetails(context),
+        const SizedBox(height: 16),
+        // 设为默认（多账号时显示）
+        if (hasMultipleAccounts) ...[
+          _buildSetAsDefaultRow(context, isDefaultAccount),
+          const SizedBox(height: 16),
+        ],
+        // 多账号列表
+        if (hasMultipleAccounts) ...[
+          _buildAccountsList(
+            context,
+            accounts,
+            currentAccountId,
+            currentAccount,
           ),
-        ),
-        if (isCurrentAccount) _buildLogoutFooter(context),
+          const SizedBox(height: 16),
+        ],
       ],
     );
     if (widget.presentationManaged) return content;
@@ -482,15 +471,12 @@ class _AccountProfileBottomSheetState
               textAlign: compact ? TextAlign.start : TextAlign.end,
             );
             return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    Icons.badge_outlined,
-                    size: 20,
-                    color: theme.colorScheme.outline,
-                  ),
+                Icon(
+                  Icons.badge_outlined,
+                  size: 20,
+                  color: theme.colorScheme.outline,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -574,17 +560,16 @@ class _AccountProfileBottomSheetState
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 20, color: theme.colorScheme.outline),
-          ),
+          Icon(icon, size: 20, color: theme.colorScheme.outline),
           const SizedBox(width: 12),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final compact = constraints.maxWidth < 420;
+                final compact =
+                    constraints.maxWidth < 420 ||
+                    MediaQuery.textScalerOf(context).scale(1) >= 2;
                 final labelText = Text(
                   label,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -606,7 +591,7 @@ class _AccountProfileBottomSheetState
                 }
 
                 return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     labelText,
                     const SizedBox(width: 16),

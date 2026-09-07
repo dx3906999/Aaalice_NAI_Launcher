@@ -14869,4 +14869,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dlss_activation => '有効化と自動処理';
+
+  @override
+  String settings_subscriptionExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'メンバーシップ有効期限：$dateString';
+  }
 }

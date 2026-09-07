@@ -15277,4 +15277,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dlss_activation => 'Activation and automation';
+
+  @override
+  String settings_subscriptionExpiresOn(DateTime date) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMMMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Subscription expiry: $dateString';
+  }
 }
